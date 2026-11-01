@@ -1,0 +1,41 @@
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+import { FinanceProvider } from "@/context/FinanceContext";
+
+export const metadata: Metadata = {
+  title: "Kpakpato Finance | Gestion Portefeuilles & Coach IA Abidjan",
+  description:
+    "Application PWA de finances personnelles en FCFA : suivi Wave, Orange Money, MTN MoMo, Moov Money, Djamo, Cash et conseiller financier IA Kpakpato.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Kpakpato Finance",
+  },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#FF7900",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="fr">
+      <body className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-kpakpato-orange selection:text-white">
+        <FinanceProvider>{children}</FinanceProvider>
+      </body>
+    </html>
+  );
+}
