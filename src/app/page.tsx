@@ -19,7 +19,7 @@ type MainTab = "dashboard" | "transactions" | "kpakpato";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
-  const { user, isCloudSynced, signInWithGoogle, signOutUser, resetDemoData } =
+  const { user, isCloudSynced, signInWithGoogle, signOutUser, resetData } =
     useFinance();
 
   // Register PWA Service Worker
@@ -58,8 +58,8 @@ export default function HomePage() {
 
         <div className="flex items-center gap-1.5">
           <button
-            onClick={resetDemoData}
-            title="Réinitialiser les données démo"
+            onClick={resetData}
+            title="Effacer toutes les données"
             className="rounded-xl bg-slate-900 border border-slate-800 p-2 text-slate-400 hover:text-white transition"
           >
             <RotateCcw className="w-4 h-4" />

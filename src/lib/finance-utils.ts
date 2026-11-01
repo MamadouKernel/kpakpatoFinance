@@ -15,7 +15,7 @@ export const DEFAULT_WALLETS: WalletInfo[] = [
     color: "#1DC4FF",
     bgGradient: "from-[#1DC4FF] to-[#0284C7]",
     textColor: "text-white",
-    balance: 145000,
+    balance: 0,
     feeNote: "1% frais de transfert • Paiement marchand 0 FCFA",
   },
   {
@@ -25,7 +25,7 @@ export const DEFAULT_WALLETS: WalletInfo[] = [
     color: "#FF7900",
     bgGradient: "from-[#FF7900] to-[#EA580C]",
     textColor: "text-white",
-    balance: 68500,
+    balance: 0,
     feeNote: "Pratique pour factures CIE/SODECI & Pass Internet",
   },
   {
@@ -35,7 +35,7 @@ export const DEFAULT_WALLETS: WalletInfo[] = [
     color: "#FFCC00",
     bgGradient: "from-[#FFCC00] to-[#EAB308]",
     textColor: "text-slate-950",
-    balance: 32000,
+    balance: 0,
     feeNote: "Momopay & avances rapides",
   },
   {
@@ -45,7 +45,7 @@ export const DEFAULT_WALLETS: WalletInfo[] = [
     color: "#0055A5",
     bgGradient: "from-[#0055A5] to-[#1D4ED8]",
     textColor: "text-white",
-    balance: 15000,
+    balance: 0,
     feeNote: "Transferts nationaux & forfaits Moov",
   },
   {
@@ -55,7 +55,7 @@ export const DEFAULT_WALLETS: WalletInfo[] = [
     color: "#111827",
     bgGradient: "from-[#1E293B] to-[#0F172A]",
     textColor: "text-white",
-    balance: 210000,
+    balance: 0,
     feeNote: "Idéal pour Coffres d'épargne & abonnements en ligne",
   },
   {
@@ -65,95 +65,12 @@ export const DEFAULT_WALLETS: WalletInfo[] = [
     color: "#10B981",
     bgGradient: "from-[#10B981] to-[#059669]",
     textColor: "text-white",
-    balance: 24500,
+    balance: 0,
     feeNote: "Monnaie gbaka, wôrô-wôrô, garbadrome & marché",
   },
 ];
 
-const now = new Date();
-const daysAgo = (n: number) => {
-  const d = new Date(now);
-  d.setDate(d.getDate() - n);
-  return d.toISOString();
-};
-
-export const INITIAL_TRANSACTIONS: Transaction[] = [
-  {
-    id: "tx-1",
-    title: "Virement Salaire Net",
-    amount: 350000,
-    type: "income",
-    category: "Salaire",
-    walletId: "djamo",
-    date: daysAgo(5),
-    note: "Salaire mensuel versé sur compte/carte",
-  },
-  {
-    id: "tx-2",
-    title: "Loyer 2 Pièces",
-    amount: 90000,
-    type: "expense",
-    category: "Loyer & Factures (CIE/SODECI)",
-    walletId: "wave",
-    date: daysAgo(4),
-    note: "Paiement bailleur via Wave",
-  },
-  {
-    id: "tx-3",
-    title: "Gombo freelance design",
-    amount: 45000,
-    type: "income",
-    category: "Gombo & Business",
-    walletId: "wave",
-    date: daysAgo(2),
-    note: "Acompte client",
-  },
-  {
-    id: "tx-4",
-    title: "Rechargement CIE Prépayé & Fibre",
-    amount: 25000,
-    type: "expense",
-    category: "Loyer & Factures (CIE/SODECI)",
-    walletId: "orange",
-    date: daysAgo(2),
-  },
-  {
-    id: "tx-5",
-    title: "Cotisation Tontine du bureau",
-    amount: 25000,
-    type: "expense",
-    category: "Famille & Tontine",
-    walletId: "wave",
-    date: daysAgo(1),
-  },
-  {
-    id: "tx-6",
-    title: "Yango Cocody → Plateau (aller-retour)",
-    amount: 4500,
-    type: "expense",
-    category: "Transport (Yango/Gbaka/Wôrô)",
-    walletId: "cash",
-    date: daysAgo(0),
-  },
-  {
-    id: "tx-7",
-    title: "Déjeuner Garba + Thon double",
-    amount: 1500,
-    type: "expense",
-    category: "Nourriture & Garba",
-    walletId: "cash",
-    date: daysAgo(0),
-  },
-  {
-    id: "tx-8",
-    title: "Pass Data Mensuel",
-    amount: 10000,
-    type: "expense",
-    category: "Data & Appels",
-    walletId: "mtn",
-    date: daysAgo(0),
-  },
-];
+export const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 export const ABIDJAN_COMMUNES_RENT: CommuneRentGuide[] = [
   {
