@@ -21,6 +21,16 @@ service cloud.firestore {
       return isMember(householdId) && household(householdId).get('status', 'active') == 'active';
     }
 
+    // Une personne ne peut être que dans un seul foyer actif à la fois.
+    // Libre = aucun foyer, ou foyer déjà dissocié/annulé (même si son householdId n'a pas encore été nettoyé).
+    function userIsFree(userId) {
+      return !exists(/databases/$(database)/documents/users/$(userId))
+        || !('householdId' in get(/databases/$(database)/documents/users/$(userId)).data)
+        || get(/databases/$(database)/documents/users/$(userId)).data.householdId == null
+        || !exists(/databases/$(database)/documents/households/$(get(/databases/$(database)/documents/users/$(userId)).data.householdId))
+        || get(/databases/$(database)/documents/households/$(get(/databases/$(database)/documents/users/$(userId)).data.householdId)).data.get('status', 'active') != 'active';
+    }
+
     // Chaque utilisateur ne lit et n'écrit que son propre document
     // (portefeuilles, transactions, transferts, genre, householdId, anciens foyers).
     match /users/{userId} {
@@ -33,7 +43,8 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.memberIds == [request.auth.uid]
-        && request.resource.data.status == 'active';
+        && request.resource.data.status == 'active'
+        && userIsFree(request.auth.uid);
 
       allow update: if signedIn()
         && resource.data.get('status', 'active') == 'active'
@@ -46,6 +57,7 @@ service cloud.firestore {
           || (!(request.auth.uid in resource.data.memberIds)
               && resource.data.memberIds.size() < 2
               && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
+              && userIsFree(request.auth.uid)
               && request.resource.data.lastJoinCode == resource.data.inviteCode
               && request.resource.data.diff(resource.data).affectedKeys()
                    .hasOnly(['memberIds', 'members', 'lastJoinCode']))

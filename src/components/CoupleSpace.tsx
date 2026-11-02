@@ -58,6 +58,7 @@ export default function CoupleSpace() {
     dismissEndedNotice,
   } = useHousehold();
 
+  const [mode, setMode] = useState<"generate" | "join" | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [phone, setPhone] = useState("");
@@ -118,35 +119,75 @@ export default function CoupleSpace() {
             <Users className="h-4 w-4 text-kpakpato-orange" /> Lier mon compte à celui de mon / ma partenaire
           </h2>
           <p className="mt-1 text-xs text-slate-400">
-            Comme un appairage Bluetooth : l&apos;un(e) de vous génère un code, l&apos;autre le saisit. Peu importe qui
-            commence, homme ou femme.
+            L&apos;un(e) de vous génère un code et le donne à l&apos;autre, qui le saisit. Peu importe qui commence.
+            Une personne ne peut être que dans un seul foyer à la fois.
           </p>
-        </div>
 
-        <div className={card}>
-          <h3 className="text-sm font-extrabold text-white">1. Je génère le code</h3>
-          <p className="mt-1 text-xs text-slate-400">Vous le donnez ensuite à votre partenaire pour qu&apos;il/elle se connecte.</p>
-          <div className="mt-3 space-y-2">
-            <input className={input} placeholder="Nom du foyer (ex. Famille Konaté)" value={name} onChange={(e) => setName(e.target.value)} />
-            <input className={input} inputMode="tel" placeholder="Mon numéro Mobile Money (ex. 07 07 07 07 07)" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <input className={input} placeholder="Mon nom dans les SMS (optionnel)" value={alias} onChange={(e) => setAlias(e.target.value)} />
-            <button className={primaryBtn} disabled={busy} onClick={() => run(() => createHousehold(name, { phone, alias }))}>
-              Générer mon code
+          <div className="mt-4 grid grid-cols-1 gap-2">
+            <button
+              onClick={() => {
+                setMode("generate");
+                setError(null);
+              }}
+              className={`rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${
+                mode === "generate"
+                  ? "border-kpakpato-orange bg-kpakpato-orange/15 text-white"
+                  : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+              }`}
+            >
+              Je génère un code pour mon / ma partenaire
+            </button>
+            <button
+              onClick={() => {
+                setMode("join");
+                setError(null);
+              }}
+              className={`rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${
+                mode === "join"
+                  ? "border-kpakpato-orange bg-kpakpato-orange/15 text-white"
+                  : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+              }`}
+            >
+              J&apos;ai reçu le code de mon / ma partenaire
             </button>
           </div>
-        </div>
 
-        <div className={card}>
-          <h3 className="text-sm font-extrabold text-white">2. J&apos;ai reçu un code</h3>
-          <p className="mt-1 text-xs text-slate-400">Saisissez le code que votre partenaire a généré.</p>
-          <div className="mt-3 space-y-2">
-            <input className={`${input} uppercase tracking-widest`} placeholder="CODE" value={code} onChange={(e) => setCode(e.target.value)} maxLength={12} />
-            <input className={input} inputMode="tel" placeholder="Mon numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <input className={input} placeholder="Mon nom dans les SMS (optionnel)" value={alias} onChange={(e) => setAlias(e.target.value)} />
-            <button className={primaryBtn} disabled={busy || code.trim().length < 6} onClick={() => run(() => joinHousehold(code, { phone, alias }))}>
-              Me connecter avec ce code
-            </button>
-          </div>
+          {mode === "generate" && (
+            <div className="mt-4 space-y-2">
+              <input
+                className={input}
+                placeholder="Nom du foyer (facultatif, ex. Famille Konaté)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <button className={primaryBtn} disabled={busy} onClick={() => run(() => createHousehold(name, {}))}>
+                Générer le code
+              </button>
+              <p className="text-[11px] text-slate-500">
+                Le code s&apos;affichera ensuite : donnez-le à votre partenaire.
+              </p>
+            </div>
+          )}
+
+          {mode === "join" && (
+            <div className="mt-4 space-y-2">
+              <input
+                className={`${input} uppercase tracking-widest`}
+                placeholder="CODE REÇU"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                maxLength={12}
+                autoFocus
+              />
+              <button
+                className={primaryBtn}
+                disabled={busy || code.trim().length < 6}
+                onClick={() => run(() => joinHousehold(code, {}))}
+              >
+                Enregistrer le code
+              </button>
+            </div>
+          )}
         </div>
 
         {error && <p className="text-xs font-semibold text-rose-400">{error}</p>}
@@ -341,11 +382,21 @@ export default function CoupleSpace() {
       )}
 
       <div className={card}>
-        <h3 className="text-sm font-extrabold text-white">Mon profil dans le foyer</h3>
+        <h3 className="text-sm font-extrabold text-white">Reconnaître nos virements (facultatif)</h3>
         <p className="mt-1 text-xs text-slate-400">
-          Votre numéro et votre nom permettent à votre conjoint(e) de classer automatiquement ses virements vers vous
-          en « Virement interne au foyer ».
+          Quand vous vous envoyez de l&apos;argent via Wave ou Orange Money, ce n&apos;est pas une vraie dépense. Pour que
+          l&apos;app le reconnaisse toute seule à l&apos;import d&apos;un SMS, renseignez comment on vous retrouve :
         </p>
+        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-400">
+          <li>
+            <b className="text-slate-200">Mon numéro</b> : le numéro Wave / Orange Money sur lequel votre partenaire vous
+            envoie de l&apos;argent (ex. 07 07 07 07 07).
+          </li>
+          <li>
+            <b className="text-slate-200">Mon nom dans les SMS</b> : votre nom tel qu&apos;il apparaît dans les messages
+            (ex. KONATE AMINATA).
+          </li>
+        </ul>
         <div className="mt-3 space-y-2">
           <input
             className={input}
