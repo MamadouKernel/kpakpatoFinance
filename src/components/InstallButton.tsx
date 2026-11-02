@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Download, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -84,47 +85,66 @@ export default function InstallButton({ compact = false }: { compact?: boolean }
         {compact ? "Installer" : "Installer l'app"}
       </button>
 
-      {showHelp && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-          onClick={() => setShowHelp(false)}
-        >
+      {showHelp &&
+        createPortal(
           <div
-            className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 text-left"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-5"
+            onClick={() => setShowHelp(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Installer Kpakpato Finance"
           >
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-extrabold text-white">Installer Kpakpato Finance</h2>
+            <div
+              className="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-kpakpato-orange to-kpakpato-green text-xl font-black text-white">
+                KF
+              </div>
+              <h2 className="text-lg font-extrabold text-white">Installer Kpakpato Finance</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                {isIOS ? "Sur iPhone, suivez ces étapes :" : "Sur Android, suivez ces étapes :"}
+              </p>
+
+              <ol className="mt-5 space-y-3 text-left">
+                {(isIOS
+                  ? [
+                      "Ouvrez cette page dans Safari (pas Chrome).",
+                      "Appuyez sur le bouton Partager (carré avec une flèche vers le haut).",
+                      "Choisissez « Sur l'écran d'accueil ».",
+                      "Appuyez sur « Ajouter ».",
+                    ]
+                  : [
+                      "Ouvrez cette page dans Chrome (hors navigation privée).",
+                      "Appuyez sur le menu ⋮ en haut à droite.",
+                      "Choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil ».",
+                    ]
+                ).map((step, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-kpakpato-orange text-sm font-extrabold text-white">
+                      {i + 1}
+                    </span>
+                    <span className="pt-0.5 text-sm leading-snug text-slate-100">{step}</span>
+                  </li>
+                ))}
+              </ol>
+
+              {!isIOS && !canPrompt && (
+                <p className="mt-4 text-xs text-slate-500">
+                  Si l&apos;option n&apos;apparaît pas, l&apos;app est peut-être déjà installée sur cet appareil.
+                </p>
+              )}
+
               <button
                 onClick={() => setShowHelp(false)}
-                aria-label="Fermer"
-                className="text-slate-400 hover:text-white"
+                className="mt-6 w-full rounded-2xl bg-kpakpato-orange py-3 text-sm font-bold text-white transition hover:opacity-90"
               >
-                <X className="h-4 w-4" />
+                J&apos;ai compris
               </button>
             </div>
-            {isIOS ? (
-              <ol className="list-decimal space-y-2 pl-5 text-xs text-slate-300">
-                <li>Ouvrez cette page dans <b>Safari</b> (pas Chrome).</li>
-                <li>Appuyez sur le bouton <b>Partager</b> (carré avec une flèche vers le haut).</li>
-                <li>Faites défiler et choisissez <b>Sur l&apos;écran d&apos;accueil</b>.</li>
-                <li>Appuyez sur <b>Ajouter</b>.</li>
-              </ol>
-            ) : (
-              <ol className="list-decimal space-y-2 pl-5 text-xs text-slate-300">
-                <li>Ouvrez cette page dans <b>Chrome</b> (hors navigation privée).</li>
-                <li>Appuyez sur le menu <b>⋮</b> en haut à droite.</li>
-                <li>Choisissez <b>Installer l&apos;application</b> ou <b>Ajouter à l&apos;écran d&apos;accueil</b>.</li>
-              </ol>
-            )}
-            {!isIOS && !canPrompt && (
-              <p className="mt-3 text-[11px] text-slate-500">
-                Si l&apos;option n&apos;apparaît pas, l&apos;app est peut-être déjà installée sur cet appareil.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   );
 }
