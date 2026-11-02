@@ -5,6 +5,10 @@ import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
 import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
 import InstallButton from "@/components/InstallButton";
+import UpdateBanner from "@/components/UpdateBanner";
+import SpaceSwitch from "@/components/SpaceSwitch";
+import CoupleSpace from "@/components/CoupleSpace";
+import { useHousehold } from "@/context/HouseholdContext";
 import { useFinance } from "@/context/FinanceContext";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import {
@@ -23,6 +27,7 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
   const { user, isCloudSynced, authLoading, signInWithGoogle, signOutUser, resetData } =
     useFinance();
+  const { space } = useHousehold();
   const [signInError, setSignInError] = useState<string | null>(null);
 
   // Register PWA Service Worker
@@ -40,6 +45,7 @@ export default function HomePage() {
       return (
         <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">
           Chargement…
+          <UpdateBanner autoReload />
         </div>
       );
     }
@@ -72,6 +78,7 @@ export default function HomePage() {
             <p className="text-xs text-rose-400">Erreur : {signInError}</p>
           )}
           <InstallButton />
+          <UpdateBanner autoReload />
         </div>
       );
     }
@@ -79,6 +86,7 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-slate-950 pb-24">
+      <UpdateBanner />
       {/* Header Mobile PWA */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
         <div className="flex items-center gap-2.5">
@@ -133,9 +141,13 @@ export default function HomePage() {
         </div>
       </header>
 
+      {isCloudSynced && <SpaceSwitch />}
+
       {/* Contenu Principal */}
       <main className="flex-1 space-y-6 px-4 pt-4">
-        {activeTab === "dashboard" && (
+        {activeTab === "dashboard" && space === "couple" && isCloudSynced && <CoupleSpace />}
+
+        {activeTab === "dashboard" && !(space === "couple" && isCloudSynced) && (
           <>
             <WalletGrid />
             {/* Carte d'appel rapide au conseiller Kpakpato */}

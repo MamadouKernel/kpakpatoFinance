@@ -44,6 +44,8 @@ interface FinanceContextType {
   user: User | null;
   isCloudSynced: boolean;
   authLoading: boolean;
+  /** Vrai quand la fusion cloud/local est terminée (le cloud peut être écrit sans rien écraser). */
+  cloudReady: boolean;
   addTransaction: (tx: Omit<Transaction, "id" | "date"> & { date?: string }) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   updateWalletBalance: (walletId: WalletId, newBalance: number) => Promise<void>;
@@ -266,6 +268,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         user,
         isCloudSynced: Boolean(user && isFirebaseConfigured),
         authLoading,
+        cloudReady,
         addTransaction,
         deleteTransaction,
         updateWalletBalance,

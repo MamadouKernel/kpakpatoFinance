@@ -6,6 +6,7 @@ import SmsImport from "@/components/SmsImport";
 import {
   filterTransactionsByPeriod,
   formatFCFA,
+  isInternalTransfer,
 } from "@/lib/finance-utils";
 import {
   PeriodFilter,
@@ -44,6 +45,7 @@ const CATEGORIES: TransactionCategory[] = [
   "Gombo & Business",
   "Épargne",
   "Frais & Commissions",
+  "Virement interne au foyer",
   "Autre",
 ];
 
@@ -70,6 +72,7 @@ export default function TransactionTracker() {
   const { totalIncome, totalExpense } = useMemo(() => {
     return filteredTx.reduce(
       (acc, tx) => {
+        if (isInternalTransfer(tx)) return acc;
         if (tx.type === "income") acc.totalIncome += tx.amount;
         else acc.totalExpense += tx.amount;
         return acc;
@@ -81,7 +84,7 @@ export default function TransactionTracker() {
   const chartData = useMemo(() => {
     const map = new Map<string, number>();
     filteredTx
-      .filter((t) => t.type === "expense")
+      .filter((t) => t.type === "expense" && !isInternalTransfer(t))
       .forEach((t) => {
         const shortCat = t.category.split(" ")[0];
         map.set(shortCat, (map.get(shortCat) || 0) + t.amount);

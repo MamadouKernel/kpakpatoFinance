@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Transaction, WalletInfo } from "@/types/finance";
-import { formatFCFA } from "@/lib/finance-utils";
+import { formatFCFA, isInternalTransfer } from "@/lib/finance-utils";
 
 const SYSTEM_PROMPT = `Tu es "Kpakpato", le conseiller financier personnel intelligent des jeunes travailleurs, freelances et étudiants à Abidjan (Côte d'Ivoire).
 Ton ton est chaleureux, direct, bienveillant, légèrement teinté d'expressions ivoiriennes respectueuses ("Mon/Ma champion(ne)", "On se dit les gbê", "Faut pas que le mois finisse avant ton salaire", "Attention aux petits Yango et garba cumulés", "Coffre Djamo", "Tontine").
@@ -16,6 +16,8 @@ function buildSmartFallbackReply(
   wallets: WalletInfo[],
   transactions: Transaction[]
 ): string {
+  // Les virements entre conjoints ne sont ni des revenus ni des dépenses.
+  transactions = transactions.filter((t) => !isInternalTransfer(t));
   const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
   const waveWallet = wallets.find((w) => w.id === "wave")?.balance || 0;
   const djamoWallet = wallets.find((w) => w.id === "djamo")?.balance || 0;
@@ -86,6 +88,7 @@ Voici les données financières actuelles de l'utilisateur en FCFA :
       .join(", ")}
 - Total avoirs : ${wallets.reduce((a, b) => a + b.balance, 0)} FCFA
 - 12 dernières transactions : ${transactions
+      .filter((t) => !isInternalTransfer(t))
       .slice(0, 12)
       .map(
         (t) =>

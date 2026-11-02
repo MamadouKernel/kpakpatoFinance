@@ -1,6 +1,12 @@
 import type { TransactionType, WalletId } from "@/types/finance";
 
-export type SmsKind = "om_transfer" | "om_payment" | "wave_deposit";
+export type SmsKind =
+  | "om_transfer"
+  | "om_payment"
+  | "wave_deposit"
+  | "wave_payment"
+  | "wave_send"
+  | "wave_receive";
 
 export interface ParsedSms {
   kind: SmsKind;
@@ -8,10 +14,16 @@ export interface ParsedSms {
   type: TransactionType;
   amount: number;
   fee: number;
-  /** Solde du portefeuille après l'opération, tel qu'annoncé par l'opérateur. */
-  balance: number;
-  /** Destinataire (transfert Orange Money). */
+  /** Solde du portefeuille après l'opération, tel qu'annoncé par l'opérateur (null si le reçu n'en donne pas). */
+  balance: number | null;
+  /** Destinataire (transfert Orange Money ou Wave). */
   recipient?: string;
+  /** Expéditeur (argent reçu sur Wave). */
+  sender?: string;
+  /** Marchand (paiement Wave ou Orange Money). */
+  merchant?: string;
+  /** Identifiant de transaction lu sur le reçu, quand il existe. */
+  txId?: string;
   /** Compte source (dépôt Wave). */
   bank?: string;
   /** Date ISO lue dans le SMS, si présente. */
@@ -44,6 +56,33 @@ const WAVE_DEPOSIT = new RegExp(
     `\\s+frais\\s*:?\\s*${NUM}(?:${CUR})?(.*?)solde\\s+wave\\s*:?\\s*${NUM}${CUR}`,
   "is"
 );
+
+// Reçus Wave : "Paiement de 2 500F à CHEZ AMINATA", "Vous avez envoyé 5000F à X (+225…)",
+// "Vous avez reçu 5000F de X". Les frais, le solde et l'ID sont lus à part (voir extractTail).
+const WAVE_PAYMENT = new RegExp(
+  `(?:paiement\\s+(?:marchand\\s+)?(?:de|d['’])\\s*|vous\\s+avez\\s+pay[eé]\\s+)${NUM}${CUR}\\s+(?:[aà]|chez|au)\\s+(.+?)` +
+    `(?=\\s*[.,;(]|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
+  "i"
+);
+
+const WAVE_SEND = new RegExp(
+  `vous\\s+avez\\s+envoy[eé]\\s+${NUM}${CUR}\\s+(?:[aà])\\s+(.+?)` +
+    `(?=\\s*[.;]|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
+  "i"
+);
+
+const WAVE_RECEIVE = new RegExp(
+  `vous\\s+avez\\s+re[cç]u\\s+${NUM}${CUR}\\s+de\\s+(.+?)` +
+    `(?=\\s*[.;]|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
+  "i"
+);
+
+const FEE_RE = new RegExp(`frais(?:\\s+(?:OM|wave|de\\s+transaction))?\\s*:?\\s*${NUM}(?:${CUR})?`, "i");
+const BALANCE_RE = new RegExp(`(?:nouveau\\s+)?solde(?:\\s+(?:wave|om|orange\\s+money))?\\s*:?\\s*${NUM}${CUR}`, "i");
+const TXID_RE =
+  /(?:id(?:\s+de)?(?:\s+(?:la\s+)?transaction)?|transaction\s+id|r[eé]f(?:[eé]rence)?|txn)\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9_.-]{5,})/i;
+const MERCHANT_RE =
+  /(?:marchand|merchant|b[eé]n[eé]ficiaire|chez)\s*:?\s*([^.;]+?)(?=\s*[.;]|\s+frais|\s+solde|\s+nouveau|\s+id\b|$)/i;
 
 /**
  * Convertit un montant écrit à l'ivoirienne ou à l'européenne en FCFA entier.
@@ -107,6 +146,26 @@ function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Retire la ponctuation de fin de phrase accolée à un identifiant ("…A12345."). */
+function cleanId(id: string | undefined): string | undefined {
+  return id?.replace(/[.\-_]+$/g, "") || undefined;
+}
+
+/** Nettoie un nom/numéro capturé : retire parenthèses vides, ponctuation de fin et espaces. */
+function cleanParty(value: string): string {
+  return value.replace(/[\s.,;:]+$/g, "").trim();
+}
+
+/** Frais, solde, identifiant de transaction et date, communs aux reçus Wave / Orange Money. */
+function extractTail(raw: string): { fee: number; balance: number | null; txId?: string; date?: string } {
+  const feeMatch = raw.match(FEE_RE);
+  const balMatch = raw.match(BALANCE_RE);
+  const fee = feeMatch ? parseAmount(feeMatch[1]) : 0;
+  const balance = balMatch ? parseAmount(balMatch[1]) : null;
+  const txId = cleanId(raw.match(TXID_RE)?.[1]);
+  return { fee: fee ?? 0, balance, txId, date: parseDate(raw) };
+}
+
 /** Analyse un SMS Orange Money / Wave. Retourne null si le format n'est pas reconnu. */
 export function parseSms(text: string): ParsedSms | null {
   const raw = cleanText(text);
@@ -122,7 +181,9 @@ export function parseSms(text: string): ParsedSms | null {
       amount: nums[0],
       fee: nums[1],
       balance: nums[2],
-      recipient: m[2].trim(),
+      recipient: cleanParty(m[2]),
+      txId: cleanId(raw.match(TXID_RE)?.[1]),
+      date: parseDate(raw),
       raw,
     };
   }
@@ -138,6 +199,9 @@ export function parseSms(text: string): ParsedSms | null {
       amount: nums[0],
       fee: nums[1],
       balance: nums[2],
+      merchant: raw.match(MERCHANT_RE)?.[1] ? cleanParty(raw.match(MERCHANT_RE)![1]) : undefined,
+      txId: cleanId(raw.match(TXID_RE)?.[1]),
+      date: parseDate(raw),
       raw,
     };
   }
@@ -155,6 +219,63 @@ export function parseSms(text: string): ParsedSms | null {
       balance: nums[2],
       bank: m[2].trim(),
       date: parseDate(m[4]),
+      raw,
+    };
+  }
+
+  m = raw.match(WAVE_PAYMENT);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (amount === null) return null;
+    const tail = extractTail(raw);
+    return {
+      kind: "wave_payment",
+      walletId: "wave",
+      type: "expense",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      merchant: cleanParty(m[2]),
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
+  m = raw.match(WAVE_SEND);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (amount === null) return null;
+    const tail = extractTail(raw);
+    return {
+      kind: "wave_send",
+      walletId: "wave",
+      type: "expense",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      recipient: cleanParty(m[2]),
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
+  m = raw.match(WAVE_RECEIVE);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (amount === null) return null;
+    const tail = extractTail(raw);
+    return {
+      kind: "wave_receive",
+      walletId: "wave",
+      type: "income",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      sender: cleanParty(m[2]),
+      txId: tail.txId,
+      date: tail.date,
       raw,
     };
   }
@@ -180,6 +301,7 @@ export function parseSmsBatch(text: string): { parsed: ParsedSms[]; unrecognized
 
 /** Clé stable pour repérer un SMS déjà importé. */
 export function smsKey(sms: ParsedSms): string {
+  if (sms.txId) return `sms-tx-${sms.walletId}-${sms.txId}`;
   let h = 5381;
   for (let i = 0; i < sms.raw.length; i++) h = ((h << 5) + h + sms.raw.charCodeAt(i)) | 0;
   return `sms-${(h >>> 0).toString(36)}-${sms.raw.length}`;

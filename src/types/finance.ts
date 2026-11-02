@@ -15,6 +15,7 @@ export type TransactionCategory =
   | "Gombo & Business"
   | "Épargne"
   | "Frais & Commissions"
+  | "Virement interne au foyer"
   | "Autre";
 
 export interface WalletInfo {
@@ -65,4 +66,22 @@ export interface ChatMessage {
   role: "user" | "kpakpato";
   content: string;
   timestamp: string;
+}
+
+export interface HouseholdMember {
+  name: string;
+  /** Numéro Mobile Money du membre : sert à reconnaître les virements entre conjoints. */
+  phone?: string;
+  /** Nom tel qu'il apparaît dans les SMS (ex. "KONATE AMINATA"). */
+  alias?: string;
+}
+
+export interface Household {
+  id: string;
+  name: string;
+  memberIds: string[];
+  members: Record<string, HouseholdMember>;
+  inviteCode: string;
+  /** Budget mensuel partagé en FCFA (0 = non défini). */
+  monthlyBudget: number;
 }

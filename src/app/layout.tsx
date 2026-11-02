@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { FinanceProvider } from "@/context/FinanceContext";
+import { HouseholdProvider } from "@/context/HouseholdContext";
 
 export const metadata: Metadata = {
   title: "Kpakpato Finance | Gestion Portefeuilles & Coach IA Abidjan",
@@ -37,7 +38,9 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-kpakpato-orange selection:text-white">
-        <FinanceProvider>{children}</FinanceProvider>
+        <FinanceProvider>
+          <HouseholdProvider>{children}</HouseholdProvider>
+        </FinanceProvider>
       </body>
     </html>
   );

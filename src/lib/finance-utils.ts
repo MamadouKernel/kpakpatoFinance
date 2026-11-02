@@ -135,6 +135,11 @@ export const ABIDJAN_COMMUNES_RENT: CommuneRentGuide[] = [
   },
 ];
 
+export const INTERNAL_CATEGORY = "Virement interne au foyer" as const;
+
+/** Un virement entre conjoints ne doit fausser ni les dépenses ni les revenus. */
+export const isInternalTransfer = (tx: { category: string }) => tx.category === INTERNAL_CATEGORY;
+
 export function formatFCFA(amount: number): string {
   return new Intl.NumberFormat("fr-CI", {
     style: "decimal",

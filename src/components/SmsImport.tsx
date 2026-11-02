@@ -2,7 +2,9 @@
 
 import React, { useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
-import { formatFCFA } from "@/lib/finance-utils";
+import { useHousehold } from "@/context/HouseholdContext";
+import { INTERNAL_CATEGORY, formatFCFA } from "@/lib/finance-utils";
+import { isPartnerParty } from "@/lib/household-utils";
 import { ParsedSms, parseSmsBatch, smsKey } from "@/lib/sms-parser";
 import { TransactionCategory } from "@/types/finance";
 import { MessageSquareText, X } from "lucide-react";
@@ -21,9 +23,28 @@ const CATEGORIES: TransactionCategory[] = [
 ];
 
 function describe(sms: ParsedSms): string {
-  if (sms.kind === "om_transfer") return `Transfert vers ${sms.recipient}`;
-  if (sms.kind === "om_payment") return "Paiement Orange Money";
-  return `Dépôt depuis ${sms.bank}`;
+  switch (sms.kind) {
+    case "om_transfer":
+    case "wave_send":
+      return `Transfert vers ${sms.recipient}`;
+    case "om_payment":
+      return sms.merchant ? `Paiement ${sms.merchant}` : "Paiement Orange Money";
+    case "wave_payment":
+      return `Paiement ${sms.merchant}`;
+    case "wave_receive":
+      return `Reçu de ${sms.sender}`;
+    default:
+      return `Dépôt depuis ${sms.bank}`;
+  }
+}
+
+const walletLabel = (sms: ParsedSms) => (sms.walletId === "wave" ? "Wave" : "Orange Money");
+
+/** Argent échangé avec le conjoint : numéro ou nom correspondant à son profil de foyer. */
+function isWithPartner(sms: ParsedSms, partner: Parameters<typeof isPartnerParty>[1]): boolean {
+  if (sms.kind === "om_transfer" || sms.kind === "wave_send") return isPartnerParty(sms.recipient, partner);
+  if (sms.kind === "wave_receive") return isPartnerParty(sms.sender, partner);
+  return false;
 }
 
 const isFromDjamo = (sms: ParsedSms) =>
@@ -32,6 +53,7 @@ const isFromDjamo = (sms: ParsedSms) =>
 export default function SmsImport({ onClose }: { onClose: () => void }) {
   const { transactions, transfers, addTransaction, transferBetweenWallets, updateWalletBalance } =
     useFinance();
+  const { partner } = useHousehold();
   const [text, setText] = useState("");
   const [categories, setCategories] = useState<Record<string, TransactionCategory>>({});
   const [done, setDone] = useState<string | null>(null);
@@ -47,7 +69,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
 
   const items = parsed.map((sms) => {
     const key = smsKey(sms);
-    return { sms, key, duplicate: knownKeys.has(key) };
+    return { sms, key, duplicate: knownKeys.has(key), internal: isWithPartner(sms, partner) };
   });
   const importable = items.filter((i, idx) => !i.duplicate && items.findIndex((o) => o.key === i.key) === idx);
 
@@ -56,7 +78,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
     const ordered = [...importable].sort(
       (a, b) => (a.sms.date ?? "").localeCompare(b.sms.date ?? "")
     );
-    for (const { sms, key } of ordered) {
+    for (const { sms, key, internal } of ordered) {
       const note = `Importé depuis SMS${sms.fee > 0 ? ` (frais ${sms.fee} FCFA)` : ""}`;
       if (isFromDjamo(sms)) {
         await transferBetweenWallets("djamo", sms.walletId, sms.amount, note, {
@@ -65,10 +87,10 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
         });
       } else {
         await addTransaction({
-          title: describe(sms),
+          title: internal ? `Virement interne au foyer (${describe(sms).toLowerCase()})` : describe(sms),
           amount: sms.amount,
           type: sms.type,
-          category: categories[key] ?? "Autre",
+          category: internal ? INTERNAL_CATEGORY : categories[key] ?? "Autre",
           walletId: sms.walletId,
           date: sms.date,
           note,
@@ -77,7 +99,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
       }
       if (sms.fee > 0) {
         await addTransaction({
-          title: `Frais ${sms.walletId === "wave" ? "Wave" : "Orange Money"}`,
+          title: `Frais ${walletLabel(sms)}`,
           amount: sms.fee,
           type: "expense",
           category: "Frais & Commissions",
@@ -86,9 +108,12 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
         });
       }
       // Le solde annoncé par l'opérateur fait foi : il recale le portefeuille.
-      await updateWalletBalance(sms.walletId, sms.balance);
+      if (sms.balance !== null) await updateWalletBalance(sms.walletId, sms.balance);
     }
-    setDone(`${ordered.length} SMS importé(s). Soldes recalés sur ceux des opérateurs.`);
+    const recalibrated = ordered.some(({ sms }) => sms.balance !== null);
+    setDone(
+      `${ordered.length} SMS importé(s).${recalibrated ? " Soldes recalés sur ceux des opérateurs." : ""}`
+    );
     setText("");
   };
 
@@ -97,7 +122,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-bold text-white">
           <MessageSquareText className="w-4 h-4 text-kpakpato-orange" />
-          Importer des SMS Orange Money / Wave
+          Importer des SMS / reçus Orange Money & Wave
         </h3>
         <button onClick={onClose} className="text-slate-400 hover:text-white" title="Fermer">
           <X className="w-4 h-4" />
@@ -117,7 +142,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
 
       {done && <p className="text-xs font-semibold text-emerald-400">{done}</p>}
 
-      {items.map(({ sms, key, duplicate }) => (
+      {items.map(({ sms, key, duplicate, internal }) => (
         <div
           key={key}
           className={`rounded-xl bg-slate-900/80 p-3 text-xs text-slate-200 ${
@@ -132,10 +157,16 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
             </span>
           </div>
           <p className="mt-1 text-slate-400">
-            {sms.walletId === "wave" ? "Wave" : "Orange Money"} · Frais {formatFCFA(sms.fee)} ·
-            Solde après : {formatFCFA(sms.balance)}
+            {walletLabel(sms)} · Frais {formatFCFA(sms.fee)} ·{" "}
+            {sms.balance !== null ? `Solde après : ${formatFCFA(sms.balance)}` : "Solde non indiqué"}
             {sms.date ? ` · ${new Date(sms.date).toLocaleString("fr-FR")}` : ""}
+            {sms.txId ? ` · ID ${sms.txId}` : ""}
           </p>
+          {internal && (
+            <p className="mt-1 text-kpakpato-orange">
+              Enregistré comme « Virement interne au foyer » : exclu de vos dépenses et revenus.
+            </p>
+          )}
           {isFromDjamo(sms) && (
             <p className="mt-1 text-kpakpato-orange">
               Enregistré comme transfert Djamo → Wave (pas comme un revenu).
@@ -145,6 +176,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
             <p className="mt-1 font-semibold text-amber-400">Déjà importé — ignoré.</p>
           ) : (
             !isFromDjamo(sms) &&
+            !internal &&
             sms.type === "expense" && (
               <select
                 value={categories[key] ?? "Autre"}

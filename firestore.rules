@@ -2,9 +2,60 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Chaque utilisateur ne lit et n'écrit que son propre document.
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(householdId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
+    }
+
+    // Chaque utilisateur ne lit et n'écrit que son propre document
+    // (portefeuilles, transactions, transferts et householdId).
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // Foyer (2 membres maximum).
+    match /households/{householdId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && request.resource.data.memberIds == [request.auth.uid];
+
+      allow update: if signedIn() && (
+        // Un membre modifie le foyer (nom, budget, profils) ou le quitte.
+        (request.auth.uid in resource.data.memberIds
+          && (request.resource.data.memberIds == resource.data.memberIds
+              || request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])))
+        // Un nouvel arrivant rejoint avec le bon code d'invitation.
+        || (!(request.auth.uid in resource.data.memberIds)
+            && resource.data.memberIds.size() < 2
+            && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
+            && request.resource.data.lastJoinCode == resource.data.inviteCode
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['memberIds', 'members', 'lastJoinCode']))
+      );
+
+      allow delete: if false;
+
+      // Copie des soldes et dernières opérations de chaque membre, lisible par le foyer.
+      match /memberData/{memberUid} {
+        allow read: if isMember(householdId);
+        allow write: if isMember(householdId) && request.auth.uid == memberUid;
+      }
+    }
+
+    // Codes d'invitation : on lit un code précis (get), jamais la liste.
+    match /householdInvites/{code} {
+      allow get: if signedIn();
+      allow list, update: if false;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && isMember(request.resource.data.householdId);
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
 
     // Tout le reste est interdit.
