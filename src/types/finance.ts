@@ -95,6 +95,8 @@ export interface Household {
   memberIds: string[];
   members: Record<string, HouseholdMember>;
   inviteCode: string;
+  /** Fin de validité du code (ms epoch) ; absent sur les anciens foyers. */
+  inviteExpiresAt?: number;
   /** Budget mensuel partagé en FCFA (0 = non défini). */
   monthlyBudget: number;
   status: HouseholdStatus;

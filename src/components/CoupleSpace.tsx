@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Copy, History, LogOut, Share2, Users } from "lucide-react";
 import { useFinance } from "@/context/FinanceContext";
 import { useHousehold } from "@/context/HouseholdContext";
@@ -36,6 +36,11 @@ function monthFlows(transactions: Parameters<typeof filterTransactionsByPeriod>[
   return { income, expense, internal };
 }
 
+function formatRemaining(ms: number) {
+  const minutes = Math.max(1, Math.round(ms / 60000));
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}` : `${minutes} min`;
+}
+
 function sumWallets(wallets: WalletInfo[]) {
   return wallets.reduce((a, w) => a + w.balance, 0);
 }
@@ -51,6 +56,7 @@ export default function CoupleSpace() {
     createHousehold,
     joinHousehold,
     leaveHousehold,
+    regenerateInvite,
     updateMyProfile,
     setMonthlyBudget,
     pastHouseholds,
@@ -68,6 +74,13 @@ export default function CoupleSpace() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const expired = household?.inviteExpiresAt !== undefined && now > household.inviteExpiresAt;
 
   const mine = useMemo(() => monthFlows(transactions), [transactions]);
   const theirs = useMemo(
@@ -242,7 +255,7 @@ export default function CoupleSpace() {
         <div className={card}>
           <p className="text-sm font-bold text-white">Donnez ce code à votre partenaire</p>
           <p className="mt-1 text-xs text-slate-400">
-            Il/elle ouvre l&apos;Espace Couple, puis « J&apos;ai reçu un code », et le saisit. Le code ne sert qu&apos;à vous lier tous les deux.
+            Il/elle ouvre l&apos;Espace Couple, puis « J&apos;ai reçu un code », et le saisit. Le code ne sert qu&apos;à vous lier tous les deux et expire au bout de 24 h.
           </p>
           <div className="mt-3 flex items-center gap-2">
             <code className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-center text-lg font-black tracking-[0.3em] text-kpakpato-orange">
@@ -278,6 +291,20 @@ export default function CoupleSpace() {
             )}
           </div>
           {copied && <p className="mt-1 text-xs text-emerald-400">Code copié.</p>}
+          {household.inviteExpiresAt !== undefined && (
+            expired ? (
+              <p className="mt-2 text-xs text-amber-400">Ce code a expiré.</p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">Valable encore {formatRemaining(household.inviteExpiresAt - now)}.</p>
+            )
+          )}
+          <button
+            disabled={busy}
+            onClick={() => run(regenerateInvite)}
+            className="mt-2 text-xs font-bold text-kpakpato-orange underline disabled:opacity-40"
+          >
+            Générer un nouveau code
+          </button>
         </div>
       )}
 

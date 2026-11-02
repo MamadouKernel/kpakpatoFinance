@@ -27,6 +27,9 @@ import type {
   WalletInfo,
 } from "@/types/finance";
 
+/** Durée de vie d'un code d'invitation : 24 h. */
+export const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
+
 export type Space = "personal" | "couple";
 
 export interface MemberData {
@@ -56,6 +59,8 @@ interface HouseholdContextType {
   joinHousehold: (code: string, profile: Omit<HouseholdMember, "name">) => Promise<void>;
   /** Met fin au foyer : plus personne ne voit les données de l'autre, la trace est conservée. */
   leaveHousehold: () => Promise<void>;
+  /** Remplace le code d'invitation (expiré ou perdu) par un nouveau, valable INVITE_TTL_MS. */
+  regenerateInvite: () => Promise<void>;
   updateMyProfile: (profile: Omit<HouseholdMember, "name">) => Promise<void>;
   setMonthlyBudget: (amount: number) => Promise<void>;
 }
@@ -148,6 +153,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
           memberIds: Array.isArray(d.memberIds) ? d.memberIds : [],
           members: d.members ?? {},
           inviteCode: d.inviteCode ?? "",
+          inviteExpiresAt: typeof d.inviteExpiresAt === "number" ? d.inviteExpiresAt : undefined,
           monthlyBudget: typeof d.monthlyBudget === "number" ? d.monthlyBudget : 0,
           status: d.status === "dissolved" || d.status === "cancelled" ? d.status : "active",
           createdAt: d.createdAt,
@@ -280,11 +286,13 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     const { database, uid: me, displayName } = requireAuth();
     const ref = doc(collection(database, "households"));
     const inviteCode = generateInviteCode();
+    const inviteExpiresAt = Date.now() + INVITE_TTL_MS;
     await setDoc(ref, {
       name: name.trim() || "Notre foyer",
       memberIds: [me],
       members: { [me]: { name: displayName, ...cleanProfile(extra) } },
       inviteCode,
+      inviteExpiresAt,
       monthlyBudget: 0,
       status: "active",
       createdAt: new Date().toISOString(),
@@ -292,6 +300,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     await setDoc(doc(database, "householdInvites", inviteCode), {
       householdId: ref.id,
       ownerUid: me,
+      expiresAt: inviteExpiresAt,
     });
     await setDoc(doc(database, "users", me), { householdId: ref.id }, { merge: true });
   };
@@ -302,6 +311,10 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     const invite = await getDoc(doc(database, "householdInvites", code));
     const hid = invite.data()?.householdId as string | undefined;
     if (!invite.exists() || !hid) throw new Error("Code invalide. Vérifiez-le auprès de votre conjoint(e).");
+    const expiresAt = invite.data()?.expiresAt;
+    if (typeof expiresAt === "number" && Date.now() > expiresAt) {
+      throw new Error("Ce code a expiré. Demandez à votre partenaire d'en générer un nouveau.");
+    }
     try {
       await updateDoc(doc(database, "households", hid), {
         memberIds: arrayUnion(me),
@@ -312,6 +325,20 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Impossible de rejoindre ce foyer (déjà complet ou code expiré).");
     }
     await setDoc(doc(database, "users", me), { householdId: hid }, { merge: true });
+  };
+
+  const regenerateInvite = async () => {
+    const { database, uid: me } = requireAuth();
+    if (!household || household.memberIds.length >= 2) return;
+    const inviteCode = generateInviteCode();
+    const inviteExpiresAt = Date.now() + INVITE_TTL_MS;
+    await setDoc(doc(database, "householdInvites", inviteCode), {
+      householdId: household.id,
+      ownerUid: me,
+      expiresAt: inviteExpiresAt,
+    });
+    await updateDoc(doc(database, "households", household.id), { inviteCode, inviteExpiresAt });
+    await deleteDoc(doc(database, "householdInvites", household.inviteCode)).catch(() => undefined);
   };
 
   const leaveHousehold = async () => {
@@ -379,6 +406,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
         createHousehold,
         joinHousehold,
         leaveHousehold,
+        regenerateInvite,
         updateMyProfile,
         setMonthlyBudget,
       }}
