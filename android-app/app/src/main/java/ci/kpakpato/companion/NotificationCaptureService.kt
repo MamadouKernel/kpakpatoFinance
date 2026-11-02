@@ -19,7 +19,7 @@ class NotificationCaptureService : NotificationListenerService() {
         val text = listOf(title, body).filter { it.isNotBlank() }.joinToString("\n").trim()
 
         if (TransactionFilter.looksLikeTransaction(text)) {
-            InboxUploader.submit(applicationContext, text, "notification:${sbn.packageName}")
+            MessageStore.add(applicationContext, text, "notification:${sbn.packageName}")
         }
     }
 }

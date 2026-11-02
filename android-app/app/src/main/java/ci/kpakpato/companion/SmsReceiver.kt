@@ -16,7 +16,7 @@ class SmsReceiver : BroadcastReceiver() {
         messages.groupBy { it.originatingAddress }.forEach { (sender, parts) ->
             val body = parts.joinToString("") { it.messageBody.orEmpty() }.trim()
             if (TransactionFilter.looksLikeTransaction(body)) {
-                InboxUploader.submit(context.applicationContext, TransactionFilter.withSender(sender, body), "sms")
+                MessageStore.add(context.applicationContext, TransactionFilter.withSender(sender, body), "sms")
             }
         }
     }
