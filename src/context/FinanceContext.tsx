@@ -79,6 +79,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(isFirebaseConfigured);
   // Vrai uniquement une fois la fusion cloud/local terminée : évite d'écraser Firestore avant la lecture.
   const [cloudReady, setCloudReady] = useState(false);
+  // Incrémenté au retour du réseau : relance la lecture du cloud si elle avait échoué hors ligne.
+  const [syncAttempt, setSyncAttempt] = useState(0);
 
   // Dernier état connu, lisible depuis les callbacks asynchrones (auth) sans valeurs figées.
   const latest = useRef({ wallets, transactions, transfers });
@@ -139,6 +141,18 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => unsubscribe();
+  }, [syncAttempt]);
+
+  const cloudReadyRef = useRef(false);
+  cloudReadyRef.current = cloudReady;
+
+  useEffect(() => {
+    // Seulement si la première lecture n'avait pas abouti : sinon on referait une fusion inutile.
+    const retry = () => {
+      if (!cloudReadyRef.current) setSyncAttempt((n) => n + 1);
+    };
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
   }, []);
 
   // Persist changes to LocalStorage & Firestore

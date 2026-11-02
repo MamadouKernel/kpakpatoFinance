@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useFinance } from "@/context/FinanceContext";
-import { useHousehold } from "@/context/HouseholdContext";
-import { INTERNAL_CATEGORY, formatFCFA } from "@/lib/finance-utils";
-import { isPartnerParty } from "@/lib/household-utils";
-import { ParsedSms, parseSmsBatch, smsKey } from "@/lib/sms-parser";
+import { describeSms as describe, isFromDjamo, useSmsImporter } from "@/hooks/useSmsImporter";
+import { formatFCFA } from "@/lib/finance-utils";
+import { parseSmsBatch } from "@/lib/sms-parser";
 import {
   consumePendingImport,
+  isAutoImportEnabled,
   isClipboardWatchEnabled,
+  setAutoImportEnabled,
   setClipboardWatchEnabled,
   subscribePendingImport,
 } from "@/lib/import-inbox";
@@ -28,45 +28,11 @@ const CATEGORIES: TransactionCategory[] = [
   "Autre",
 ];
 
-function describe(sms: ParsedSms): string {
-  switch (sms.kind) {
-    case "om_transfer":
-    case "wave_send":
-      return `Transfert vers ${sms.recipient}`;
-    case "om_payment":
-      return sms.merchant ? `Paiement ${sms.merchant}` : "Paiement Orange Money";
-    case "wave_payment":
-      return `Paiement ${sms.merchant}`;
-    case "wave_receive":
-      return `Reçu de ${sms.sender}`;
-    case "generic_debit":
-      return sms.merchant ? `Paiement ${sms.merchant}` : "Compte débité";
-    case "generic_credit":
-      return "Compte crédité";
-    default:
-      return `Dépôt depuis ${sms.bank}`;
-  }
-}
-
-
-/** Argent échangé avec le conjoint : numéro ou nom correspondant à son profil de foyer. */
-function isWithPartner(sms: ParsedSms, partner: Parameters<typeof isPartnerParty>[1]): boolean {
-  if (sms.kind === "om_transfer" || sms.kind === "wave_send") return isPartnerParty(sms.recipient, partner);
-  if (sms.kind === "wave_receive") return isPartnerParty(sms.sender, partner);
-  return false;
-}
-
-const isFromDjamo = (sms: ParsedSms) =>
-  sms.kind === "wave_deposit" && /djamo/i.test(sms.bank ?? "");
-
 export default function SmsImport({ onClose }: { onClose: () => void }) {
-  const { transactions, transfers, addTransaction, transferBetweenWallets, updateWalletBalance } =
-    useFinance();
-  const { partner } = useHousehold();
-  const { wallets } = useFinance();
+  const { wallets, walletName, prepare, importable: pickImportable, importItems } = useSmsImporter();
   const [walletOverrides, setWalletOverrides] = useState<Record<string, WalletId>>({});
   const [watching, setWatching] = useState(false);
-  const walletName = (id: WalletId) => wallets.find((w) => w.id === id)?.shortName ?? id;
+  const [autoImport, setAutoImport] = useState(false);
   const [text, setText] = useState("");
   const [categories, setCategories] = useState<Record<string, TransactionCategory>>({});
   const [done, setDone] = useState<string | null>(null);
@@ -80,6 +46,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
         setDone(null);
       }
       setWatching(isClipboardWatchEnabled());
+      setAutoImport(isAutoImportEnabled());
     };
     take();
     return subscribePendingImport(take);
@@ -87,65 +54,12 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
 
   const { parsed, unrecognized } = useMemo(() => parseSmsBatch(text), [text]);
 
-  const knownKeys = useMemo(() => {
-    const keys = new Set<string>();
-    transactions.forEach((t) => t.smsKey && keys.add(t.smsKey));
-    transfers.forEach((t) => t.smsKey && keys.add(t.smsKey));
-    return keys;
-  }, [transactions, transfers]);
-
-  const items = parsed.map((sms) => {
-    const key = smsKey(sms);
-    return {
-      sms: { ...sms, walletId: walletOverrides[key] ?? sms.walletId },
-      key,
-      duplicate: knownKeys.has(key),
-      internal: isWithPartner(sms, partner),
-    };
-  });
-  const importable = items.filter((i, idx) => !i.duplicate && items.findIndex((o) => o.key === i.key) === idx);
+  const items = prepare(parsed, walletOverrides);
+  const importable = pickImportable(items);
 
   const handleImport = async () => {
-    // Du plus ancien au plus récent : le solde final est celui du dernier SMS.
-    const ordered = [...importable].sort(
-      (a, b) => (a.sms.date ?? "").localeCompare(b.sms.date ?? "")
-    );
-    for (const { sms, key, internal } of ordered) {
-      const note = `Importé depuis SMS${sms.fee > 0 ? ` (frais ${sms.fee} FCFA)` : ""}`;
-      if (isFromDjamo(sms)) {
-        await transferBetweenWallets("djamo", sms.walletId, sms.amount, note, {
-          date: sms.date,
-          smsKey: key,
-        });
-      } else {
-        await addTransaction({
-          title: internal ? `Virement interne au foyer (${describe(sms).toLowerCase()})` : describe(sms),
-          amount: sms.amount,
-          type: sms.type,
-          category: internal ? INTERNAL_CATEGORY : categories[key] ?? "Autre",
-          walletId: sms.walletId,
-          date: sms.date,
-          note,
-          smsKey: key,
-        });
-      }
-      if (sms.fee > 0) {
-        await addTransaction({
-          title: `Frais ${walletName(sms.walletId)}`,
-          amount: sms.fee,
-          type: "expense",
-          category: "Frais & Commissions",
-          walletId: sms.walletId,
-          date: sms.date,
-        });
-      }
-      // Le solde annoncé par l'opérateur fait foi : il recale le portefeuille.
-      if (sms.balance !== null) await updateWalletBalance(sms.walletId, sms.balance);
-    }
-    const recalibrated = ordered.some(({ sms }) => sms.balance !== null);
-    setDone(
-      `${ordered.length} SMS importé(s).${recalibrated ? " Soldes recalés sur ceux des opérateurs." : ""}`
-    );
+    const { count, recalibrated } = await importItems(importable, categories);
+    setDone(`${count} SMS importé(s).${recalibrated ? " Soldes recalés sur ceux des opérateurs." : ""}`);
     setText("");
   };
 
@@ -184,6 +98,24 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
           appareil, et seulement quand vous revenez sur l&apos;app.
         </span>
       </label>
+
+      {watching && (
+        <label className="flex items-start gap-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={autoImport}
+            onChange={(e) => {
+              setAutoImport(e.target.checked);
+              setAutoImportEnabled(e.target.checked);
+            }}
+            className="mt-0.5"
+          />
+          <span>
+            Importer automatiquement, sans me demander. Les doublons sont ignorés et les cas incertains (portefeuille
+            non précisé) restent à confirmer. Vous pouvez supprimer une opération depuis l&apos;historique.
+          </span>
+        </label>
+      )}
 
       <textarea
         value={text}

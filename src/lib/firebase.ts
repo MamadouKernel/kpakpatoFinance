@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  Firestore,
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,6 +23,23 @@ export const isFirebaseConfigured = Boolean(
     firebaseConfig.projectId
 );
 
+/**
+ * Firestore avec cache local persistant (IndexedDB) : l'app reste utilisable sans réseau,
+ * les écritures faites hors ligne partent d'elles-mêmes au retour de la connexion.
+ */
+function createFirestore(firebaseApp: FirebaseApp): Firestore {
+  if (typeof window !== "undefined") {
+    try {
+      return initializeFirestore(firebaseApp, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch {
+      // Déjà initialisé (rechargement à chaud) ou IndexedDB indisponible : cache en mémoire.
+    }
+  }
+  return getFirestore(firebaseApp);
+}
+
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
@@ -26,7 +49,7 @@ if (isFirebaseConfigured) {
   try {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
-    db = getFirestore(app);
+    db = createFirestore(app);
     googleProvider = new GoogleAuthProvider();
   } catch (error) {
     console.warn("Firebase initialization skipped (mode démo local actif):", error);

@@ -68,3 +68,22 @@ export function wasClipboardSeen(text: string): boolean {
     return false;
   }
 }
+
+const AUTO_KEY = "kpakpato_auto_import_v1";
+
+/** Import sans confirmation des textes copiés (désactivé par défaut). */
+export function isAutoImportEnabled(): boolean {
+  try {
+    return localStorage.getItem(AUTO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setAutoImportEnabled(enabled: boolean) {
+  try {
+    localStorage.setItem(AUTO_KEY, enabled ? "1" : "0");
+  } catch {
+    // sans importance
+  }
+}

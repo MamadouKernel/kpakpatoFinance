@@ -39,6 +39,7 @@ export interface Transaction {
   date: string; // ISO string
   note?: string;
   smsKey?: string; // empreinte du SMS importé (anti-doublon)
+  tontineId?: string; // cotisation rattachée à une tontine
 }
 
 export interface Transfer {
@@ -117,4 +118,26 @@ export interface PastHousehold {
   endedByName?: string;
   endedByGender?: Gender;
   endedByGenderOther?: string;
+}
+
+export type TontineFrequency = "weekly" | "monthly";
+
+export interface Tontine {
+  id: string;
+  name: string;
+  /** Cotisation par tour, en FCFA. */
+  contribution: number;
+  frequency: TontineFrequency;
+  /** Nombre de participants : la cagnotte d'un tour = cotisation × participants. */
+  members: number;
+  /** Portefeuille habituel de la cotisation. */
+  walletId: WalletId;
+  /** Date à laquelle je reçois la cagnotte (ISO), si connue. */
+  payoutDate?: string;
+}
+
+export interface CommunityData {
+  tontines: Tontine[];
+  /** Enveloppe mensuelle d'aide à la famille (« taxe familiale »), 0 = non définie. */
+  solidarityBudget: number;
 }

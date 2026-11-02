@@ -3,9 +3,11 @@
 import React, { useEffect, useState } from "react";
 import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
+import TontineSection from "@/components/TontineSection";
 import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
 import InstallButton from "@/components/InstallButton";
 import UpdateBanner from "@/components/UpdateBanner";
+import OfflineBanner from "@/components/OfflineBanner";
 import ClipboardWatcher from "@/components/ClipboardWatcher";
 import { setPendingImport } from "@/lib/import-inbox";
 import IncomeBonus from "@/components/IncomeBonus";
@@ -47,7 +49,7 @@ export default function HomePage() {
 
   // Register PWA Service Worker
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker
         .register("/sw.js")
         .catch((err) => console.warn("SW registration skipped:", err));
@@ -114,6 +116,7 @@ export default function HomePage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-slate-950 pb-24">
       <UpdateBanner />
+      <OfflineBanner />
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
@@ -179,6 +182,7 @@ export default function HomePage() {
         {activeTab === "dashboard" && !(space === "couple" && isCloudSynced) && (
           <>
             <WalletGrid />
+            <TontineSection />
             {/* Carte d'appel rapide au conseiller Kpakpato */}
             <div
               onClick={() => setActiveTab("kpakpato")}

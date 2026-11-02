@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import SmsImport from "@/components/SmsImport";
+import FeesCounter from "@/components/FeesCounter";
 import { hasPendingImport, subscribePendingImport } from "@/lib/import-inbox";
 import {
   filterTransactionsByPeriod,
@@ -202,6 +203,8 @@ export default function TransactionTracker() {
           </button>
         ))}
       </div>
+
+      <FeesCounter />
 
       {/* Résumé Revenus vs Dépenses sur la période */}
       <div className="grid grid-cols-2 gap-3">
