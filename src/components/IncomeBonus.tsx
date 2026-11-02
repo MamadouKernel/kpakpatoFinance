@@ -12,8 +12,20 @@ const input =
 
 const PARTS_OPTIONS = Array.from({ length: (MAX_PARTS - 1) * 2 + 1 }, (_, i) => 1 + i * 0.5);
 
-const partsLabel = (p: number) =>
-  p === 1 ? "1 part — célibataire sans enfant" : p === 2 ? "2 parts — marié(e) sans enfant" : `${p} parts`;
+// 1 part (seul) ou 2 parts (marié) + 0,5 part par enfant à charge, plafonné à 5 parts.
+const PARTS_LABELS: Record<number, string> = {
+  1: "1 part — célibataire, divorcé(e) ou veuf(ve), sans enfant",
+  1.5: "1,5 part — célibataire, divorcé(e) ou veuf(ve), 1 enfant à charge",
+  2: "2 parts — marié(e) sans enfant (ou seul(e) avec 2 enfants)",
+  2.5: "2,5 parts — marié(e) avec 1 enfant (ou seul(e) avec 3 enfants)",
+  3: "3 parts — marié(e) avec 2 enfants (ou seul(e) avec 4 enfants)",
+  3.5: "3,5 parts — marié(e) avec 3 enfants",
+  4: "4 parts — marié(e) avec 4 enfants",
+  4.5: "4,5 parts — marié(e) avec 5 enfants",
+  5: "5 parts — marié(e) avec 6 enfants ou plus (maximum)",
+};
+
+const partsLabel = (p: number) => PARTS_LABELS[p] ?? `${String(p).replace(".", ",")} parts`;
 
 function NumberField({
   label,
@@ -88,6 +100,11 @@ export default function IncomeBonus() {
               ))}
             </select>
           </label>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Comptez 1 part si vous êtes seul(e), 2 parts si vous êtes marié(e), puis ajoutez 0,5 part par enfant à
+            charge (maximum 5 parts). Plus il y a de parts, moins vous payez d&apos;impôt. Vérifiez votre nombre de
+            parts sur votre bulletin de paie.
+          </p>
         </div>
       </div>
 
