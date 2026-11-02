@@ -13,7 +13,7 @@ import {
   subscribePendingImport,
 } from "@/lib/import-inbox";
 import { TransactionCategory, WalletId } from "@/types/finance";
-import { MessageSquareText, X } from "lucide-react";
+import { ClipboardPaste, MessageSquareText, X } from "lucide-react";
 
 const CATEGORIES: TransactionCategory[] = [
   "Nourriture & Garba",
@@ -116,6 +116,25 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
           </span>
         </label>
       )}
+
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            const pasted = (await navigator.clipboard.readText()).trim();
+            if (pasted) {
+              setText(pasted);
+              setDone(null);
+            }
+          } catch {
+            // autorisation refusée : l'utilisateur peut coller à la main
+          }
+        }}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 ring-1 ring-slate-600 hover:text-white"
+      >
+        <ClipboardPaste className="h-3.5 w-3.5 text-kpakpato-orange" />
+        Coller depuis le presse-papiers
+      </button>
 
       <textarea
         value={text}

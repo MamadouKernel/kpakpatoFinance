@@ -2,13 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, Download, Share2, Smartphone, X } from "lucide-react";
+import { CheckCircle2, ClipboardPaste, Share2, Smartphone, X } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useFinance } from "@/context/FinanceContext";
 import { db } from "@/lib/firebase";
-
-/** Fichier à déposer dans public/ après avoir construit l'app compagnon (voir android-companion/README.md). */
-const APK_PATH = "/kpakpato-compagnon.apk";
+import { setPendingImport } from "@/lib/import-inbox";
 
 const step = "flex items-start gap-3";
 const num =
@@ -32,20 +30,33 @@ function formatLast(iso: string) {
 }
 
 /** Explique comment faire arriver les transactions du téléphone dans Kpakpato, et indique si c'est branché. */
-export default function PhoneConnect({ onClose }: { onClose: () => void }) {
+export default function PhoneConnect({ onClose, onImport }: { onClose: () => void; onImport: () => void }) {
   const { user } = useFinance();
   const [lastAt, setLastAt] = useState<string | null>(null);
-  const [apkReady, setApkReady] = useState<boolean | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [installed, setInstalled] = useState(false);
   const [isAndroid, setIsAndroid] = useState(true);
 
   useEffect(() => {
     setInstalled(window.matchMedia("(display-mode: standalone)").matches);
     setIsAndroid(/android/i.test(navigator.userAgent));
-    fetch(APK_PATH, { method: "HEAD" })
-      .then((r) => setApkReady(r.ok && !(r.headers.get("content-type") ?? "").includes("text/html")))
-      .catch(() => setApkReady(false));
   }, []);
+
+  const pasteAndImport = async () => {
+    setPasteError(null);
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        setPasteError("Le presse-papiers est vide : copiez d'abord le SMS ou la notification.");
+        return;
+      }
+      setPendingImport(text);
+      onClose();
+      onImport();
+    } catch {
+      setPasteError("Autorisez l'accès au presse-papiers, ou collez le texte dans « Importer SMS ».");
+    }
+  };
 
   const uid = user?.uid;
   useEffect(() => {
@@ -66,7 +77,7 @@ export default function PhoneConnect({ onClose }: { onClose: () => void }) {
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Connecter mon téléphone"
+      aria-label="Importer depuis mon téléphone"
     >
       <div
         className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
@@ -75,24 +86,22 @@ export default function PhoneConnect({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-extrabold text-white">
             <Smartphone className="h-5 w-5 text-kpakpato-orange" />
-            Connecter mon téléphone
+            Importer depuis mon téléphone
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white" title="Fermer">
             <X className="h-5 w-5" />
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-400">
-          Faites arriver vos transactions Wave, Orange Money, MTN et Moov dans Kpakpato sans les ressaisir.
+          Ajoutez vos transactions Wave, Orange Money, MTN et Moov en un geste, sans les ressaisir et sans rien télécharger de plus.
         </p>
 
-        <div
-          className={`mt-4 flex items-center gap-2 rounded-xl p-3 text-xs font-semibold ${
-            lastAt ? "bg-emerald-500/10 text-emerald-300" : "bg-slate-800 text-slate-300"
-          }`}
-        >
-          <CheckCircle2 className={`h-4 w-4 shrink-0 ${lastAt ? "text-emerald-400" : "text-slate-500"}`} />
-          {lastAt ? `Téléphone connecté · dernier message le ${formatLast(lastAt)}` : "Aucun message reçu du téléphone pour l'instant."}
-        </div>
+        {lastAt && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            Dernier message reçu du téléphone le {formatLast(lastAt)}
+          </div>
+        )}
 
         {/* Mode 1 : partage depuis la PWA */}
         <section className="mt-5 rounded-2xl border border-slate-700/70 p-4">
@@ -118,45 +127,29 @@ export default function PhoneConnect({ onClose }: { onClose: () => void }) {
           )}
         </section>
 
-        {/* Mode 2 : app compagnon */}
+        {/* Mode 2 : copier puis coller */}
         <section className="mt-3 rounded-2xl border border-slate-700/70 p-4">
           <h3 className="flex items-center gap-2 text-sm font-bold text-white">
-            <Smartphone className="h-4 w-4 text-kpakpato-orange" />
-            Option 2 · Capture automatique (Android)
+            <ClipboardPaste className="h-4 w-4 text-kpakpato-orange" />
+            Option 2 · Copier puis importer (Android et iPhone)
           </h3>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Une petite app lit les notifications et SMS de transaction et les envoie ici toute seule.
-          </p>
-
-          {apkReady ? (
-            <a
-              href={APK_PATH}
-              download
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-kpakpato-orange py-2.5 text-sm font-bold text-white hover:opacity-90"
-            >
-              <Download className="h-4 w-4" />
-              Télécharger l&apos;app Android
-            </a>
-          ) : (
-            <p className="mt-3 rounded-xl bg-slate-800 p-3 text-[11px] text-slate-300">
-              {apkReady === null
-                ? "Vérification…"
-                : "Le téléchargement n'est pas encore publié sur cette plateforme."}
-            </p>
-          )}
-
           <Steps
             items={[
-              "Téléchargez l'app, ouvrez le fichier et autorisez l'installation depuis cette source si Android le demande.",
-              "Ouvrez « Kpakpato Compagnon » et connectez-vous avec le même compte Google que sur Kpakpato.",
-              "Appuyez sur « Autoriser l'accès aux notifications » et activez Kpakpato Compagnon dans la liste.",
-              "Appuyez sur « Autoriser la lecture des SMS » et acceptez.",
-              "Sur Tecno, Infinix ou Xiaomi : excluez l'app de l'économiseur de batterie, sinon Android peut l'arrêter.",
+              "Copiez le texte du SMS ou de la notification de la transaction.",
+              "Revenez ici et appuyez sur « Coller et importer ».",
+              "Pour que l'app le propose d'elle-même à chaque retour, cochez l'option dans « Importer SMS » (l'import automatique y est aussi proposé).",
             ]}
           />
+          <button
+            onClick={pasteAndImport}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-kpakpato-orange py-2.5 text-sm font-bold text-white hover:opacity-90"
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            Coller et importer
+          </button>
+          {pasteError && <p className="mt-2 text-[11px] text-amber-400">{pasteError}</p>}
           <p className="mt-3 text-[11px] text-slate-500">
-            Seuls les messages qui contiennent un montant en FCFA et un mot d&apos;opération sont envoyés, et uniquement
-            vers votre compte. L&apos;import dans vos portefeuilles se fait quand vous ouvrez Kpakpato.
+            Le texte n&apos;est lu que sur votre appareil, et seulement quand vous le demandez ou l&apos;avez autorisé.
           </p>
         </section>
 

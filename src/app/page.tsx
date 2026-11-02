@@ -48,6 +48,14 @@ export default function HomePage() {
   // Texte partagé vers l'app (Android : Partager → Kpakpato) : on le dépose pour l'import.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    // Raccourcis de l'icône (appui long) : /?action=import ouvre l'import, /?action=add ouvre les opérations.
+    const action = params.get("action");
+    if (action === "import" || action === "add") {
+      if (action === "import") setPendingImport(""); // « texte vide en attente » = ouvrir l'écran d'import
+      setActiveTab("transactions");
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
     const shared = (params.get("text") || params.get("title") || "").trim();
     if (!shared) return;
     setPendingImport(shared);
@@ -126,7 +134,7 @@ export default function HomePage() {
       <UpdateBanner />
       <OfflineBanner />
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
-      {showPhone && <PhoneConnect onClose={() => setShowPhone(false)} />}
+      {showPhone && <PhoneConnect onClose={() => setShowPhone(false)} onImport={() => setActiveTab("transactions")} />}
       <CompanionInbox />
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
@@ -166,8 +174,8 @@ export default function HomePage() {
           {isCloudSynced && (
             <button
               onClick={() => setShowPhone(true)}
-              title="Connecter mon téléphone"
-              aria-label="Connecter mon téléphone"
+              title="Importer depuis mon téléphone"
+              aria-label="Importer depuis mon téléphone"
               className="rounded-xl bg-slate-900 border border-slate-800 p-2 text-slate-400 hover:text-white transition"
             >
               <Smartphone className="w-4 h-4" />
