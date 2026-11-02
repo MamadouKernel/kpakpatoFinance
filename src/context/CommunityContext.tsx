@@ -8,7 +8,6 @@ import { generateId } from "@/lib/finance-utils";
 import type { CommunityData, Tontine, TontineFrequency, WalletId } from "@/types/finance";
 
 const KEY = "kpakpato_community_v1";
-const WALLETS: WalletId[] = ["wave", "orange", "mtn", "moov", "djamo", "cash"];
 const EMPTY: CommunityData = { tontines: [], solidarityBudget: 0 };
 
 function sanitize(raw: unknown): CommunityData {
@@ -30,7 +29,7 @@ function sanitize(raw: unknown): CommunityData {
           contribution: Math.round(t.contribution),
           frequency: t.frequency as TontineFrequency,
           members: Number.isFinite(t.members) && t.members >= 2 ? Math.round(t.members) : 2,
-          walletId: WALLETS.includes(t.walletId) ? t.walletId : "wave",
+          walletId: typeof t.walletId === "string" && t.walletId ? t.walletId : "wave",
           ...(typeof t.payoutDate === "string" && !Number.isNaN(new Date(t.payoutDate).getTime())
             ? { payoutDate: t.payoutDate }
             : {}),
