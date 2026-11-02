@@ -53,9 +53,7 @@ function buildSmartFallbackReply(
       ? `Tes charges de logement/factures sont à **${formatFCFA(rentSpend)}** et ton transport à **${formatFCFA(transportSpend)}**. Veille à ce que le duo (Loyer + Yango/Wôrô-wôrô) reste sous **35% de ton revenu net**.`
       : `Pense à enregistrer ton loyer et tes rechargements CIE prépayés dès le début du mois pour connaître ton vrai reste à vivre.`
   }
-- **Conseil actionnable pour ta question (« ${question.slice(0, 60)} ») :** Applique la méthode **50 / 30 / 20 adaptée à Abidjan** : 50% charges fixes (Loyer, CIE/SODECI, Transport, Nourriture), 20% Épargne intouchable dès la paie, 15% Tontine/Famille plafonnée, et 15% Loisirs/Chill.
-
-*(💡 Astuce : ajoute ta clé \`GEMINI_API_KEY\` dans \`.env.local\` pour activer le moteur Gemini IA en direct !)*`;
+- **Conseil actionnable pour ta question (« ${question.slice(0, 60)} ») :** Applique la méthode **50 / 30 / 20 adaptée à Abidjan** : 50% charges fixes (Loyer, CIE/SODECI, Transport, Nourriture), 20% Épargne intouchable dès la paie, 15% Tontine/Famille plafonnée, et 15% Loisirs/Chill.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -82,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
       systemInstruction: SYSTEM_PROMPT,
     });
 
