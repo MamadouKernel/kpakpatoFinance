@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { Fingerprint, Lock } from "lucide-react";
+import { Fingerprint } from "lucide-react";
 import { useFinance } from "@/context/FinanceContext";
 import {
   biometricSupported,
@@ -12,9 +11,7 @@ import {
   hasLock,
   isValidPin,
   PIN_LENGTH,
-  removeLock,
   setPin,
-  skipLockPrompt,
 } from "@/lib/app-lock";
 
 const field =
@@ -100,15 +97,6 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
                 {bio ? "Désactiver empreinte / visage" : "Activer empreinte / visage"}
               </button>
             )}
-            <button
-              onClick={() => {
-                removeLock(uid);
-                refresh();
-              }}
-              className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-rose-300"
-            >
-              Retirer le verrouillage
-            </button>
           </div>
         </>
       ) : (
@@ -156,36 +144,8 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
       )}
       {message && <p className="text-xs font-semibold text-amber-400">{message}</p>}
       <p className="text-[11px] text-slate-500">
-        Le code et l&apos;empreinte restent sur cet appareil. Le verrouillage se remet en route après 30 secondes hors de l&apos;app.
+        Le code est lié à votre compte : il est valable sur tous vos appareils. L&apos;empreinte ou le visage se règle sur chaque appareil. L&apos;app se reverrouille après 30 secondes hors de l&apos;app.
       </p>
     </div>
-  );
-}
-
-/** Proposé une fois, à la première arrivée dans l'app : l'utilisateur peut passer. */
-export function LockPrompt({ onClose }: { onClose: () => void }) {
-  const { user } = useFinance();
-  const close = () => {
-    if (user) skipLockPrompt(user.uid);
-    onClose();
-  };
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-5" role="dialog" aria-modal="true">
-      <div className="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
-        <h2 className="flex items-center gap-2 text-lg font-extrabold text-white">
-          <Lock className="h-5 w-5 text-kpakpato-orange" />
-          Protéger l&apos;application
-        </h2>
-        <p className="mt-1 mb-4 text-xs text-slate-400">
-          Choisissez un code à 6 chiffres pour que personne d&apos;autre n&apos;ouvre vos comptes. Vous pourrez aussi utiliser votre empreinte
-          ou votre visage.
-        </p>
-        <LockSettings onDone={close} />
-        <button onClick={close} className="mt-3 w-full text-xs text-slate-400 underline">
-          Plus tard
-        </button>
-      </div>
-    </div>,
-    document.body
   );
 }

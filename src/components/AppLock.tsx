@@ -3,20 +3,60 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Delete, Fingerprint, Lock } from "lucide-react";
 import { useFinance } from "@/context/FinanceContext";
-import { hasBiometric, hasLock, PIN_LENGTH, removeLock, unlockWithBiometric, verifyPin } from "@/lib/app-lock";
+import { LockSettings } from "@/components/LockSetup";
+import {
+  clearCloudLock,
+  consumeLockReset,
+  hasBiometric,
+  hasLock,
+  markLockForReset,
+  PIN_LENGTH,
+  removeLock,
+  syncLock,
+  unlockWithBiometric,
+  verifyPin,
+} from "@/lib/app-lock";
 
 /** Délai passé en arrière-plan au-delà duquel l'app se reverrouille. */
 const RELOCK_AFTER_MS = 30_000;
 
-/** Écran de verrouillage (code, empreinte ou visage) affiché par-dessus l'app tant qu'elle n'est pas déverrouillée. */
+type Phase = "checking" | "setup" | "locked" | "error";
+
+/**
+ * Tout utilisateur connecté passe par un code (ou l'empreinte / le visage) pour entrer dans l'app.
+ * Le code est créé une seule fois, lié au compte, puis valable sur tous les appareils.
+ */
 export default function AppLock({ children }: { children: React.ReactNode }) {
   const { user, signOutUser } = useFinance();
   const uid = user?.uid ?? null;
+  const [phase, setPhase] = useState<Phase>("checking");
   const [unlockedFor, setUnlockedFor] = useState<string | null>(null);
-  const [, bump] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const hiddenAt = useRef<number | null>(null);
 
-  const locked = Boolean(uid && unlockedFor !== uid && hasLock(uid));
+  useEffect(() => {
+    if (!uid) {
+      setUnlockedFor(null);
+      return;
+    }
+    let cancelled = false;
+    setPhase("checking");
+    (async () => {
+      // « Code oublié » : la connexion Google qui vient d'avoir lieu prouve l'identité, on repart de zéro.
+      if (consumeLockReset(uid)) {
+        removeLock(uid);
+        await clearCloudLock(uid);
+        if (!cancelled) setPhase("setup");
+        return;
+      }
+      const res = await syncLock(uid);
+      if (cancelled) return;
+      setPhase(res === "ready" ? "locked" : res === "missing" ? "setup" : "error");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, attempt]);
 
   useEffect(() => {
     const onChange = () => {
@@ -31,23 +71,61 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
 
-  // Un code créé ou supprimé dans le profil doit être pris en compte tout de suite.
+  // Code créé ou changé dans le profil : on reste déverrouillé.
   useEffect(() => {
-    const refresh = () => bump((n) => n + 1);
-    window.addEventListener("kpakpato-lock-changed", refresh);
-    return () => window.removeEventListener("kpakpato-lock-changed", refresh);
-  }, []);
+    const onChanged = () => {
+      if (uid && hasLock(uid)) {
+        setUnlockedFor(uid);
+        setPhase("locked");
+      }
+    };
+    window.addEventListener("kpakpato-lock-changed", onChanged);
+    return () => window.removeEventListener("kpakpato-lock-changed", onChanged);
+  }, [uid]);
+
+  const open = !uid || (phase === "locked" && unlockedFor === uid);
 
   return (
     <>
       {children}
-      {locked && uid && (
+      {!open && uid && phase === "checking" && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950 text-sm text-slate-400">
+          Chargement…
+        </div>
+      )}
+      {!open && uid && phase === "error" && (
+        <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center gap-4 bg-slate-950 px-6 text-center">
+          <p className="text-sm text-slate-300">Connexion impossible pour vérifier votre code. Vérifiez votre réseau.</p>
+          <button
+            onClick={() => setAttempt((n) => n + 1)}
+            className="rounded-2xl bg-kpakpato-orange px-6 py-3 text-sm font-bold text-white"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+      {!open && uid && phase === "setup" && (
+        <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center gap-4 overflow-y-auto bg-slate-950 px-6 py-8">
+          <div className="w-full max-w-sm">
+            <h1 className="flex items-center gap-2 text-xl font-extrabold text-white">
+              <Lock className="h-5 w-5 text-kpakpato-orange" />
+              Protégez votre application
+            </h1>
+            <p className="mt-1 mb-4 text-xs text-slate-400">
+              Choisissez un code à 6 chiffres. Il vous sera demandé à chaque ouverture, sur tous vos appareils, et vous
+              pourrez aussi utiliser votre empreinte ou votre visage.
+            </p>
+            <LockSettings />
+          </div>
+        </div>
+      )}
+      {!open && uid && phase === "locked" && (
         <LockScreen
           uid={uid}
           name={user?.displayName || user?.email || ""}
           onUnlock={() => setUnlockedFor(uid)}
           onForgot={async () => {
-            removeLock(uid);
+            markLockForReset(uid);
             await signOutUser();
           }}
         />

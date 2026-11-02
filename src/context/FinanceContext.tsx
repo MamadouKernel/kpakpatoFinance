@@ -312,6 +312,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const signOutUser = async () => {
     if (auth) {
       await fbSignOut(auth);
+      // Les données restent dans le cloud : on vide l'appareil pour qu'elles ne soient ni visibles ni mélangées au compte suivant.
+      try {
+        Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // stockage indisponible
+      }
+      setWallets(DEFAULT_WALLETS);
+      setTransactions(INITIAL_TRANSACTIONS);
+      setTransfers([]);
     }
   };
 

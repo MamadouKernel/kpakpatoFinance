@@ -17,8 +17,6 @@ import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
 import ProfileModal from "@/components/ProfileModal";
 import PhoneConnect from "@/components/PhoneConnect";
-import { LockPrompt } from "@/components/LockSetup";
-import { hasLock, lockPromptSkipped } from "@/lib/app-lock";
 import { useHousehold } from "@/context/HouseholdContext";
 import { useFinance } from "@/context/FinanceContext";
 import { isFirebaseConfigured } from "@/lib/firebase";
@@ -45,13 +43,6 @@ export default function HomePage() {
   const [signInError, setSignInError] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
-  const [showLockPrompt, setShowLockPrompt] = useState(false);
-
-  // Une fois dans l'app, on propose une fois de protéger l'accès par un code ou l'empreinte.
-  const uid = user?.uid;
-  useEffect(() => {
-    if (uid && profile && !hasLock(uid) && !lockPromptSkipped(uid)) setShowLockPrompt(true);
-  }, [uid, profile]);
 
   // Texte partagé vers l'app (Android : Partager → Kpakpato) : on le dépose pour l'import.
   useEffect(() => {
@@ -141,7 +132,6 @@ export default function HomePage() {
     <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-slate-950 pb-24">
       <UpdateBanner />
       <OfflineBanner />
-      {showLockPrompt && <LockPrompt onClose={() => setShowLockPrompt(false)} />}
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
       {showPhone && <PhoneConnect onClose={() => setShowPhone(false)} onImport={() => setActiveTab("transactions")} />}
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />

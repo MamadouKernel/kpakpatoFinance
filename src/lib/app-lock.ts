@@ -4,6 +4,9 @@
  * il protège l'écran contre quelqu'un qui prend le téléphone, pas le compte Google.
  */
 
+import { deleteField, doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 const PIN_MIN = 6;
 const PIN_MAX = 6;
 const MAX_FAILS = 5;
@@ -20,7 +23,7 @@ interface LockData {
 }
 
 const lockKey = (uid: string) => `kpakpato_lock_v1_${uid}`;
-const skipKey = (uid: string) => `kpakpato_lock_skip_v1_${uid}`;
+const resetKey = (uid: string) => `kpakpato_lock_reset_v1_${uid}`;
 
 const toB64 = (buf: ArrayBuffer | Uint8Array) => {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
@@ -60,26 +63,72 @@ export const PIN_LENGTH = { min: PIN_MIN, max: PIN_MAX };
 
 export const hasLock = (uid: string) => read(uid) !== null;
 export const hasBiometric = (uid: string) => Boolean(read(uid)?.cred);
-export const lockPromptSkipped = (uid: string) => {
-  try {
-    return localStorage.getItem(skipKey(uid)) === "1";
-  } catch {
-    return true;
-  }
-};
-export const skipLockPrompt = (uid: string) => {
-  try {
-    localStorage.setItem(skipKey(uid), "1");
-  } catch {
-    // ignoré
-  }
-};
-
 export async function setPin(uid: string, pin: string) {
   if (!isValidPin(pin)) throw new Error(`Le code doit faire ${PIN_MAX} chiffres.`);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const previous = read(uid);
   write(uid, { salt: toB64(salt), hash: await derive(pin, salt), cred: previous?.cred });
+  void pushLockToCloud(uid);
+}
+
+/** Le code suit le compte : saisi une fois, il est valable sur tous les appareils (l'empreinte reste propre à chaque appareil). */
+export async function pushLockToCloud(uid: string) {
+  const data = read(uid);
+  if (!db || !data) return;
+  await setDoc(doc(db, "users", uid), { appLock: { salt: data.salt, hash: data.hash } }, { merge: true }).catch(() => undefined);
+}
+
+/** Retire le code du compte (après une réauthentification Google, via « Code oublié »). */
+export async function clearCloudLock(uid: string) {
+  if (!db) return;
+  await setDoc(doc(db, "users", uid), { appLock: deleteField() }, { merge: true }).catch(() => undefined);
+}
+
+/** « Code oublié » : on déconnecte, et au prochain passage par Google le code est effacé puis redemandé. */
+export function markLockForReset(uid: string) {
+  try {
+    localStorage.setItem(resetKey(uid), "1");
+  } catch {
+    // ignoré
+  }
+  removeLock(uid);
+}
+
+export function consumeLockReset(uid: string): boolean {
+  try {
+    const flagged = localStorage.getItem(resetKey(uid)) === "1";
+    if (flagged) localStorage.removeItem(resetKey(uid));
+    return flagged;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Récupère le code du compte sur cet appareil. « ready » : un code existe ici ;
+ * « missing » : aucun code nulle part ; « error » : impossible de le savoir (hors ligne, sans copie locale).
+ */
+export async function syncLock(uid: string): Promise<"ready" | "missing" | "error"> {
+  if (!db) return hasLock(uid) ? "ready" : "missing";
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    const cloud = snap.data()?.appLock;
+    if (cloud && typeof cloud.salt === "string" && typeof cloud.hash === "string") {
+      const local = read(uid);
+      if (!local || local.salt !== cloud.salt || local.hash !== cloud.hash) {
+        write(uid, { salt: cloud.salt, hash: cloud.hash, cred: local?.cred });
+      }
+      return "ready";
+    }
+    // Code créé avant la synchronisation : on le monte sur le compte.
+    if (hasLock(uid)) {
+      await pushLockToCloud(uid);
+      return "ready";
+    }
+    return "missing";
+  } catch {
+    return hasLock(uid) ? "ready" : "error";
+  }
 }
 
 export function removeLock(uid: string) {
