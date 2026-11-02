@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useFinance } from "@/context/FinanceContext";
 import { useHousehold } from "@/context/HouseholdContext";
+import { LockSettings } from "@/components/LockSetup";
 import { GENDER_LABELS } from "@/lib/household-utils";
 import type { Gender } from "@/types/finance";
 
@@ -118,6 +119,11 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
               Sert à reconnaître les virements entre conjoints. Plusieurs noms possibles, séparés par « ; ».
             </span>
           </label>
+        </div>
+
+        <div className="mt-5 border-t border-slate-800 pt-4">
+          <h3 className="mb-2 text-sm font-bold text-white">Verrouillage de l&apos;application</h3>
+          <LockSettings />
         </div>
 
         {error && <p className="mt-3 text-xs font-semibold text-rose-400">{error}</p>}
