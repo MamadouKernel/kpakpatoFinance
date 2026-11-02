@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
 import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
+import InstallButton from "@/components/InstallButton";
 import { useFinance } from "@/context/FinanceContext";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import {
@@ -70,6 +71,7 @@ export default function HomePage() {
           {signInError && (
             <p className="text-xs text-rose-400">Erreur : {signInError}</p>
           )}
+          <InstallButton />
         </div>
       );
     }
@@ -101,6 +103,7 @@ export default function HomePage() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <InstallButton compact />
           <button
             onClick={resetData}
             title="Effacer toutes les données"

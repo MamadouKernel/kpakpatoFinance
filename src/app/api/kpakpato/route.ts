@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Transaction, WalletInfo } from "@/types/finance";
 import { formatFCFA } from "@/lib/finance-utils";
 
@@ -78,11 +77,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
-      systemInstruction: SYSTEM_PROMPT,
-    });
+    const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
     const financialContext = `
 Voici les données financières actuelles de l'utilisateur en FCFA :
@@ -101,8 +96,34 @@ Voici les données financières actuelles de l'utilisateur en FCFA :
 Question de l'utilisateur : ${message}
 `;
 
-    const result = await model.generateContent(financialContext);
-    const text = result.response.text();
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts: [{ text: financialContext }] }],
+        }),
+      }
+    );
+
+    if (!geminiRes.ok) {
+      const errBody = await geminiRes.text();
+      throw new Error(`Gemini ${geminiRes.status}: ${errBody.slice(0, 300)}`);
+    }
+
+    const data = await geminiRes.json();
+    const parts: { text?: string; thought?: boolean }[] =
+      data?.candidates?.[0]?.content?.parts ?? [];
+    const text = parts
+      .filter((p) => p.text && !p.thought)
+      .map((p) => p.text)
+      .join("");
+    if (!text) throw new Error("Gemini : réponse vide");
 
     return NextResponse.json({
       reply: text,
@@ -113,8 +134,9 @@ Question de l'utilisateur : ${message}
     return NextResponse.json(
       {
         reply:
-          "Désolé mon champion, le réseau a légèrement coupé. Vérifie ta clé GEMINI_API_KEY ou réessaie dans un instant !",
+          "Désolé mon champion, le conseiller IA est momentanément indisponible. Réessaie dans un instant !",
         mode: "error-fallback",
+        detail: error instanceof Error ? error.message : String(error),
       },
       { status: 200 }
     );
