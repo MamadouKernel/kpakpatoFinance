@@ -17,8 +17,8 @@ import {
   verifyPin,
 } from "@/lib/app-lock";
 
-/** Délai passé en arrière-plan au-delà duquel l'app se reverrouille. */
-const RELOCK_AFTER_MS = 30_000;
+/** Inactivité (écran non touché, app ouverte ou en arrière-plan) au-delà de laquelle l'app se reverrouille. */
+const RELOCK_AFTER_MS = 25 * 60_000;
 
 type Phase = "checking" | "setup" | "locked" | "error";
 
@@ -32,7 +32,7 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<Phase>("checking");
   const [unlockedFor, setUnlockedFor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const hiddenAt = useRef<number | null>(null);
+  const lastActive = useRef(Date.now());
 
   useEffect(() => {
     if (!uid) {
@@ -59,22 +59,32 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
   }, [uid, attempt]);
 
   useEffect(() => {
-    const onChange = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenAt.current = Date.now();
-      } else if (hiddenAt.current && Date.now() - hiddenAt.current > RELOCK_AFTER_MS) {
-        hiddenAt.current = null;
-        setUnlockedFor(null);
-      }
+    const expire = () => {
+      if (Date.now() - lastActive.current > RELOCK_AFTER_MS) setUnlockedFor(null);
     };
-    document.addEventListener("visibilitychange", onChange);
-    return () => document.removeEventListener("visibilitychange", onChange);
+    const touch = () => {
+      expire();
+      lastActive.current = Date.now();
+    };
+    const events = ["pointerdown", "keydown", "touchstart", "scroll"] as const;
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true, capture: true }));
+    const onVisible = () => {
+      if (document.visibilityState === "visible") expire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(expire, 30_000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, touch, { capture: true }));
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
   }, []);
 
   // Code créé ou changé dans le profil : on reste déverrouillé.
   useEffect(() => {
     const onChanged = () => {
       if (uid && hasLock(uid)) {
+        lastActive.current = Date.now();
         setUnlockedFor(uid);
         setPhase("locked");
       }
@@ -123,7 +133,10 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
         <LockScreen
           uid={uid}
           name={user?.displayName || user?.email || ""}
-          onUnlock={() => setUnlockedFor(uid)}
+          onUnlock={() => {
+            lastActive.current = Date.now();
+            setUnlockedFor(uid);
+          }}
           onForgot={async () => {
             markLockForReset(uid);
             await signOutUser();

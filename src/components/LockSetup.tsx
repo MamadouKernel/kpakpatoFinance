@@ -144,7 +144,7 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
       )}
       {message && <p className="text-xs font-semibold text-amber-400">{message}</p>}
       <p className="text-[11px] text-slate-500">
-        Le code est lié à votre compte : il est valable sur tous vos appareils. L&apos;empreinte ou le visage se règle sur chaque appareil. L&apos;app se reverrouille après 30 secondes hors de l&apos;app.
+        Le code est lié à votre compte : il est valable sur tous vos appareils. L&apos;empreinte ou le visage se règle sur chaque appareil. L&apos;app se reverrouille après 25 minutes d&apos;inactivité.
       </p>
     </div>
   );

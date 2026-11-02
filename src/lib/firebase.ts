@@ -51,6 +51,8 @@ if (isFirebaseConfigured) {
     auth = getAuth(app);
     db = createFirestore(app);
     googleProvider = new GoogleAuthProvider();
+    // Plusieurs comptes Gmail sur le même téléphone : on laisse toujours choisir le compte.
+    googleProvider.setCustomParameters({ prompt: "select_account" });
   } catch (error) {
     console.warn("Firebase initialization skipped (mode démo local actif):", error);
   }
