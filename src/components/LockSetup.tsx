@@ -48,7 +48,7 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
 
   const save = async () => {
     setMessage(null);
-    if (!isValidPin(code)) return setMessage(`Le code doit faire ${PIN_LENGTH.min} à ${PIN_LENGTH.max} chiffres.`);
+    if (!isValidPin(code)) return setMessage(`Le code doit faire ${PIN_LENGTH.max} chiffres.`);
     if (code !== again) return setMessage("Les deux codes ne sont pas identiques.");
     setBusy(true);
     try {
@@ -177,7 +177,7 @@ export function LockPrompt({ onClose }: { onClose: () => void }) {
           Protéger l&apos;application
         </h2>
         <p className="mt-1 mb-4 text-xs text-slate-400">
-          Choisissez un code pour que personne d&apos;autre n&apos;ouvre vos comptes. Vous pourrez aussi utiliser votre empreinte
+          Choisissez un code à 6 chiffres pour que personne d&apos;autre n&apos;ouvre vos comptes. Vous pourrez aussi utiliser votre empreinte
           ou votre visage.
         </p>
         <LockSettings onDone={close} />

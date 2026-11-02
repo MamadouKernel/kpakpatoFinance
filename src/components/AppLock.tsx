@@ -103,7 +103,9 @@ function LockScreen({
   const press = (digit: string) => {
     if (busy || pin.length >= PIN_LENGTH.max) return;
     setMessage(null);
-    setPin(pin + digit);
+    const next = pin + digit;
+    setPin(next);
+    if (next.length === PIN_LENGTH.max) void submit(next);
   };
 
   return (
@@ -168,14 +170,6 @@ function LockScreen({
           <Delete className="h-6 w-6" />
         </button>
       </div>
-
-      <button
-        onClick={() => submit(pin)}
-        disabled={busy || pin.length < PIN_LENGTH.min}
-        className="w-60 rounded-2xl bg-kpakpato-orange py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-40"
-      >
-        Déverrouiller
-      </button>
 
       <button onClick={onForgot} className="text-[11px] text-slate-500 underline">
         Code oublié ? Se reconnecter avec Google

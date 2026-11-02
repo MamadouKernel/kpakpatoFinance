@@ -4,7 +4,7 @@
  * il protège l'écran contre quelqu'un qui prend le téléphone, pas le compte Google.
  */
 
-const PIN_MIN = 4;
+const PIN_MIN = 6;
 const PIN_MAX = 6;
 const MAX_FAILS = 5;
 const LOCKOUT_MS = 30_000;
@@ -55,7 +55,7 @@ async function derive(pin: string, salt: Uint8Array<ArrayBuffer>) {
   return toB64(bits);
 }
 
-export const isValidPin = (pin: string) => new RegExp(`^\\d{${PIN_MIN},${PIN_MAX}}$`).test(pin);
+export const isValidPin = (pin: string) => new RegExp(`^\\d{${PIN_MAX}}$`).test(pin);
 export const PIN_LENGTH = { min: PIN_MIN, max: PIN_MAX };
 
 export const hasLock = (uid: string) => read(uid) !== null;
@@ -76,7 +76,7 @@ export const skipLockPrompt = (uid: string) => {
 };
 
 export async function setPin(uid: string, pin: string) {
-  if (!isValidPin(pin)) throw new Error(`Le code doit faire ${PIN_MIN} à ${PIN_MAX} chiffres.`);
+  if (!isValidPin(pin)) throw new Error(`Le code doit faire ${PIN_MAX} chiffres.`);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const previous = read(uid);
   write(uid, { salt: toB64(salt), hash: await derive(pin, salt), cred: previous?.cred });
