@@ -5,6 +5,7 @@ import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
 import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
 import { useFinance } from "@/context/FinanceContext";
+import { isFirebaseConfigured } from "@/lib/firebase";
 import {
   Wallet,
   BarChart3,
@@ -19,8 +20,9 @@ type MainTab = "dashboard" | "transactions" | "kpakpato";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
-  const { user, isCloudSynced, signInWithGoogle, signOutUser, resetData } =
+  const { user, isCloudSynced, authLoading, signInWithGoogle, signOutUser, resetData } =
     useFinance();
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   // Register PWA Service Worker
   useEffect(() => {
@@ -30,6 +32,48 @@ export default function HomePage() {
         .catch((err) => console.warn("SW registration skipped:", err));
     }
   }, []);
+
+  // Connexion Google obligatoire dès que Firebase est configuré.
+  if (isFirebaseConfigured) {
+    if (authLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">
+          Chargement…
+        </div>
+      );
+    }
+    if (!user) {
+      return (
+        <div className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 bg-slate-950 px-6 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-kpakpato-orange to-kpakpato-green text-2xl font-black text-white shadow-md">
+            KF
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-white">
+              Kpakpato <span className="text-kpakpato-orange">Finance</span>
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Connectez-vous avec Google pour accéder à vos portefeuilles.
+            </p>
+          </div>
+          <button
+            onClick={() =>
+              signInWithGoogle().catch((err) =>
+                setSignInError(err?.code || "Connexion impossible")
+              )
+            }
+            className="inline-flex items-center gap-2 rounded-2xl bg-kpakpato-orange px-6 py-3 text-sm font-bold text-white transition hover:opacity-90"
+          >
+            <LogIn className="h-4 w-4" />
+            Se connecter avec Google
+          </button>
+          {signInError && (
+            <p className="text-xs text-rose-400">Erreur : {signInError}</p>
+          )}
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-slate-950 pb-24">

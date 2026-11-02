@@ -43,6 +43,7 @@ interface FinanceContextType {
   totalBalance: number;
   user: User | null;
   isCloudSynced: boolean;
+  authLoading: boolean;
   addTransaction: (tx: Omit<Transaction, "id" | "date"> & { date?: string }) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   updateWalletBalance: (walletId: WalletId, newBalance: number) => Promise<void>;
@@ -73,6 +74,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  // Vrai tant que Firebase Auth n'a pas répondu (évite d'afficher l'écran de connexion à tort).
+  const [authLoading, setAuthLoading] = useState(isFirebaseConfigured);
   // Vrai uniquement une fois la fusion cloud/local terminée : évite d'écraser Firestore avant la lecture.
   const [cloudReady, setCloudReady] = useState(false);
 
@@ -107,6 +110,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (!isFirebaseConfigured || !auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      setAuthLoading(false);
       setCloudReady(false);
       if (!currentUser || !db) return;
       try {
@@ -261,6 +265,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         totalBalance,
         user,
         isCloudSynced: Boolean(user && isFirebaseConfigured),
+        authLoading,
         addTransaction,
         deleteTransaction,
         updateWalletBalance,
