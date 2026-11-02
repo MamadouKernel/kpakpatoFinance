@@ -6,6 +6,9 @@ import TransactionTracker from "@/components/TransactionTracker";
 import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
 import InstallButton from "@/components/InstallButton";
 import UpdateBanner from "@/components/UpdateBanner";
+import ClipboardWatcher from "@/components/ClipboardWatcher";
+import { setPendingImport } from "@/lib/import-inbox";
+import IncomeBonus from "@/components/IncomeBonus";
 import SpaceSwitch from "@/components/SpaceSwitch";
 import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
@@ -16,13 +19,14 @@ import {
   Wallet,
   BarChart3,
   Bot,
+  Banknote,
   Cloud,
   LogIn,
   LogOut,
   RotateCcw,
 } from "lucide-react";
 
-type MainTab = "dashboard" | "transactions" | "kpakpato";
+type MainTab = "dashboard" | "transactions" | "income" | "kpakpato";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
@@ -30,6 +34,16 @@ export default function HomePage() {
     useFinance();
   const { space, profile, profileLoaded } = useHousehold();
   const [signInError, setSignInError] = useState<string | null>(null);
+
+  // Texte partagé vers l'app (Android : Partager → Kpakpato) : on le dépose pour l'import.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shared = (params.get("text") || params.get("title") || "").trim();
+    if (!shared) return;
+    setPendingImport(shared);
+    setActiveTab("transactions");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   // Register PWA Service Worker
   useEffect(() => {
@@ -100,6 +114,7 @@ export default function HomePage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-slate-950 pb-24">
       <UpdateBanner />
+      <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
         <div className="flex items-center gap-2.5">
@@ -189,12 +204,14 @@ export default function HomePage() {
 
         {activeTab === "transactions" && <TransactionTracker />}
 
+        {activeTab === "income" && <IncomeBonus />}
+
         {activeTab === "kpakpato" && <KpakpatoAdvisor />}
       </main>
 
       {/* Barre de Navigation Mobile (Bottom Tab Bar PWA) */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-lg">
-        <div className="mx-auto grid max-w-xl grid-cols-3 px-4 py-2">
+        <div className="mx-auto grid max-w-xl grid-cols-4 px-2 py-2">
           <button
             onClick={() => setActiveTab("dashboard")}
             className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-xs font-bold transition ${
@@ -216,7 +233,19 @@ export default function HomePage() {
             }`}
           >
             <BarChart3 className="w-5 h-5" />
-            <span>Jour / Sem / Mois</span>
+            <span>Stats</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("income")}
+            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-xs font-bold transition ${
+              activeTab === "income"
+                ? "text-kpakpato-orange"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Banknote className="w-5 h-5" />
+            <span>Revenus</span>
           </button>
 
           <button

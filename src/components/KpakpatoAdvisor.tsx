@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
+import { useSalary } from "@/context/SalaryContext";
+import { MEAL_BASKETS, analyzeMeals, mealContext } from "@/lib/meal-analysis";
 import {
   ABIDJAN_COMMUNES_RENT,
   calculateIvorianSalary,
@@ -17,20 +19,24 @@ import {
   CheckCircle2,
   AlertTriangle,
   PiggyBank,
+  UtensilsCrossed,
 } from "lucide-react";
 
-type AdvisorSubTab = "chat" | "salary" | "rent";
+type AdvisorSubTab = "chat" | "salary" | "meals" | "rent";
 
 const QUICK_PROMPTS = [
   "Analyse mes dépenses et mes portefeuilles Wave/Djamo",
   "Comment épargner 50 000 FCFA par mois à Abidjan ?",
   "Mes petits Yango et Garba me ruinent, quel plan adopter ?",
   "Quel budget loyer viser avec 350 000 FCFA net ?",
+  "Mes heures sup partent en fast-food, comment épargner ma prime ?",
 ];
 
 export default function KpakpatoAdvisor() {
   const { wallets, transactions } = useFinance();
+  const { profile: salaryProfile } = useSalary();
   const [subTab, setSubTab] = useState<AdvisorSubTab>("chat");
+  const meals = useMemo(() => analyzeMeals(transactions, salaryProfile), [transactions, salaryProfile]);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -77,6 +83,7 @@ export default function KpakpatoAdvisor() {
           message: query,
           wallets,
           transactions,
+          meals: mealContext(meals),
         }),
       });
       const data = await res.json();
@@ -129,7 +136,7 @@ export default function KpakpatoAdvisor() {
           </div>
 
           {/* Sous-navigation du module Kpakpato */}
-          <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl bg-slate-800 p-1">
+          <div className="mt-4 grid grid-cols-4 gap-1 rounded-2xl bg-slate-800 p-1">
             <button
               onClick={() => setSubTab("chat")}
               className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition ${
@@ -139,7 +146,7 @@ export default function KpakpatoAdvisor() {
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              Coach IA
+              Coach
             </button>
             <button
               onClick={() => setSubTab("salary")}
@@ -150,7 +157,18 @@ export default function KpakpatoAdvisor() {
               }`}
             >
               <Calculator className="w-3.5 h-3.5" />
-              Brut ↔ Net CI
+              Brut/Net
+            </button>
+            <button
+              onClick={() => setSubTab("meals")}
+              className={`flex items-center justify-center gap-1 rounded-xl py-2 text-[11px] font-bold transition ${
+                subTab === "meals"
+                  ? "bg-kpakpato-orange text-white shadow"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5" />
+              Repas
             </button>
             <button
               onClick={() => setSubTab("rent")}
@@ -161,7 +179,7 @@ export default function KpakpatoAdvisor() {
               }`}
             >
               <Building2 className="w-3.5 h-3.5" />
-              Loyers Abidjan
+              Loyers
             </button>
           </div>
         </div>
@@ -374,6 +392,70 @@ export default function KpakpatoAdvisor() {
       )}
 
       {/* ONGLET 3 : CONSEILLER LOYER PAR COMMUNE D'ABIDJAN */}
+      {/* ONGLET : PANIERS REPAS & HEURES SUPPLÉMENTAIRES */}
+      {subTab === "meals" && (
+        <div className="space-y-3">
+          <div
+            className={`rounded-2xl border p-4 ${
+              meals.level === "alert"
+                ? "border-rose-500/50 bg-rose-500/10"
+                : meals.level === "watch"
+                ? "border-amber-500/50 bg-amber-500/10"
+                : "border-slate-700/60 bg-slate-800/80"
+            }`}
+          >
+            <p className="flex items-center gap-2 text-sm font-extrabold text-white">
+              <UtensilsCrossed className="h-4 w-4 text-kpakpato-orange" /> Tes repas ce mois-ci
+            </p>
+            <p className="mt-2 text-sm text-slate-100">{meals.headline}</p>
+            <dl className="mt-3 space-y-1 text-xs text-slate-300">
+              <div className="flex justify-between"><dt>Dépenses de restauration</dt><dd className="font-bold">{formatFCFA(meals.foodTotal)}</dd></div>
+              <div className="flex justify-between"><dt>Dont fast-food et livraisons ({meals.fastFoodCount})</dt><dd className="font-bold">{formatFCFA(meals.fastFoodTotal)}</dd></div>
+              {meals.deliveryTotal > 0 && (
+                <div className="flex justify-between"><dt>Dont livraisons seules</dt><dd className="font-bold">{formatFCFA(meals.deliveryTotal)}</dd></div>
+              )}
+              {meals.overtimeHours > 0 && (
+                <div className="flex justify-between"><dt>Prime nette d&apos;heures sup ({meals.overtimeHours} h)</dt><dd className="font-bold text-emerald-300">+{formatFCFA(Math.round(meals.overtimeNetGain))}</dd></div>
+              )}
+            </dl>
+            {meals.overtimeHours === 0 && (
+              <p className="mt-3 text-[11px] text-slate-400">
+                Renseignez vos heures supplémentaires dans l&apos;onglet « Revenus » : je compare alors vos repas à votre prime.
+              </p>
+            )}
+          </div>
+
+          {meals.level !== "none" && meals.level !== "ok" && meals.fastFoodTotal > 0 && (
+            <div className="rounded-2xl border border-slate-700/60 bg-slate-800/80 p-4 text-xs text-slate-200">
+              <p className="font-bold text-white">Objectif Kpakpato</p>
+              <p className="mt-1">
+                Faites des paniers maison : visez de ramener ces {formatFCFA(meals.fastFoodTotal)} à environ{" "}
+                <b>{formatFCFA(Math.round(meals.fastFoodTotal * 0.5))}</b> de courses, et mettez la différence (
+                <b>{formatFCFA(Math.round(meals.fastFoodTotal * 0.5))}</b>) dans votre Coffre Djamo avant d&apos;y toucher.
+              </p>
+            </div>
+          )}
+
+          {MEAL_BASKETS.map((b) => (
+            <div key={b.title} className="rounded-2xl border border-slate-700/60 bg-slate-800/80 p-4">
+              <p className="text-sm font-extrabold text-white">{b.title}</p>
+              <p className="mt-1 text-xs text-slate-300">{b.idea}</p>
+              <p className="mt-2 text-xs text-slate-400"><b className="text-slate-200">À acheter :</b> {b.items}</p>
+            </div>
+          ))}
+
+          <button
+            onClick={() => {
+              setSubTab("chat");
+              sendToKpakpato("Analyse mes dépenses de repas et mes heures supplémentaires, puis propose-moi un panier repas pour épargner ma prime.");
+            }}
+            className="w-full rounded-xl bg-kpakpato-orange py-2.5 text-sm font-bold text-white transition hover:brightness-110 active:scale-95"
+          >
+            Demander l&apos;avis de Kpakpato IA
+          </button>
+        </div>
+      )}
+
       {subTab === "rent" && (
         <div className="space-y-4">
           <div className="rounded-3xl bg-slate-800/80 border border-slate-700/60 p-4 space-y-3">

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import SmsImport from "@/components/SmsImport";
+import { hasPendingImport, subscribePendingImport } from "@/lib/import-inbox";
 import {
   filterTransactionsByPeriod,
   formatFCFA,
@@ -55,6 +56,15 @@ export default function TransactionTracker() {
   const [walletFilter, setWalletFilter] = useState<WalletId | "all">("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSmsImport, setShowSmsImport] = useState(false);
+
+  // Du texte à importer vient d'arriver (presse-papiers ou partage) : on ouvre l'import.
+  useEffect(() => {
+    const open = () => {
+      if (hasPendingImport()) setShowSmsImport(true);
+    };
+    open();
+    return subscribePendingImport(open);
+  }, []);
 
   // Form states
   const [txType, setTxType] = useState<TransactionType>("expense");

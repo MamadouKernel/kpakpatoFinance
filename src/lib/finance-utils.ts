@@ -1,3 +1,4 @@
+import { grossFromNet, netFromGross } from "@/lib/payroll";
 import {
   CommuneRentGuide,
   PeriodFilter,
@@ -191,41 +192,20 @@ export function calculateIvorianSalary(
   amount: number,
   mode: "brutToNet" | "netToBrut"
 ): IvorianSalaryCalculation {
-  if (mode === "brutToNet") {
-    const brut = Math.max(0, amount);
-    const cnps = Math.round(Math.min(brut, 3375000) * 0.063);
-    const cmu = brut > 0 ? 1000 : 0;
-    // Estimation simplifiée ITS CI (environ 8% à 14% selon tranche après abattement)
-    let itsRate = 0.06;
-    if (brut > 200000) itsRate = 0.095;
-    if (brut > 450000) itsRate = 0.13;
-    if (brut > 800000) itsRate = 0.165;
-    const its = brut <= 75000 ? 0 : Math.round(brut * itsRate);
-    const net = Math.max(0, brut - cnps - its - cmu);
-
-    return {
-      brut,
-      net,
-      cnps,
-      its,
-      cmu,
-      maxRecommendedRent: Math.round(net * 0.3),
-      recommendedSavings: Math.round(net * 0.2),
-      essentialNeeds: Math.round(net * 0.5),
-    };
-  } else {
-    const net = Math.max(0, amount);
-    // Approximation inverse du brut à partir du net
-    const estimatedBrut = Math.round(net / 0.82);
-    const details = calculateIvorianSalary(estimatedBrut, "brutToNet");
-    return {
-      ...details,
-      net,
-      maxRecommendedRent: Math.round(net * 0.3),
-      recommendedSavings: Math.round(net * 0.2),
-      essentialNeeds: Math.round(net * 0.5),
-    };
-  }
+  const brut = mode === "brutToNet" ? Math.max(0, amount) : grossFromNet(Math.max(0, amount));
+  const r = netFromGross(brut);
+  // En mode net → brut, on garde exactement le net demandé (l'arrondi du brut peut l'écarter de 1 FCFA).
+  const net = mode === "netToBrut" ? Math.max(0, amount) : r.net;
+  return {
+    brut,
+    net,
+    cnps: r.cnps,
+    its: r.its,
+    cmu: r.cmu,
+    maxRecommendedRent: Math.round(net * 0.3),
+    recommendedSavings: Math.round(net * 0.2),
+    essentialNeeds: Math.round(net * 0.5),
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -11,10 +11,33 @@ Tes règles d'or :
 4. Éduque sur le passage Salaire Brut -> Salaire Net en Côte d'Ivoire (CNPS 6.3%, CMU 1 000 FCFA, ITS) et la gestion de la CIE prépayée, SODECI, tontines et urgences familiales ("la taxe familiale").
 5. Réponds de manière structurée, concise et actionnable (avec des puces claires).`;
 
+interface MealsContext {
+  overtimeHours: number;
+  overtimeNetGain: number;
+  foodTotal: number;
+  fastFoodTotal: number;
+  deliveryTotal: number;
+  fastFoodCount: number;
+  primeSharePercent: number | null;
+  level: string;
+}
+
+function mealsLine(m?: MealsContext): string {
+  if (!m || m.foodTotal <= 0) return "";
+  const prime =
+    m.overtimeHours > 0
+      ? ` Prime nette d'heures sup : ${formatFCFA(m.overtimeNetGain)} (${m.overtimeHours} h)${
+          m.primeSharePercent !== null ? `, dont ${m.primeSharePercent} % dépensés en fast-food/livraison` : ""
+        }.`
+      : "";
+  return `Restauration du mois : ${formatFCFA(m.foodTotal)} dont ${formatFCFA(m.fastFoodTotal)} en fast-food/livraison (${m.fastFoodCount} achats).${prime}`;
+}
+
 function buildSmartFallbackReply(
   question: string,
   wallets: WalletInfo[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  meals?: MealsContext
 ): string {
   // Les virements entre conjoints ne sont ni des revenus ni des dépenses.
   transactions = transactions.filter((t) => !isInternalTransfer(t));
@@ -54,7 +77,15 @@ function buildSmartFallbackReply(
       ? `Tes charges de logement/factures sont à **${formatFCFA(rentSpend)}** et ton transport à **${formatFCFA(transportSpend)}**. Veille à ce que le duo (Loyer + Yango/Wôrô-wôrô) reste sous **35% de ton revenu net**.`
       : `Pense à enregistrer ton loyer et tes rechargements CIE prépayés dès le début du mois pour connaître ton vrai reste à vivre.`
   }
-- **Conseil actionnable pour ta question (« ${question.slice(0, 60)} ») :** Applique la méthode **50 / 30 / 20 adaptée à Abidjan** : 50% charges fixes (Loyer, CIE/SODECI, Transport, Nourriture), 20% Épargne intouchable dès la paie, 15% Tontine/Famille plafonnée, et 15% Loisirs/Chill.`;
+${
+    meals && meals.foodTotal > 0
+      ? `- **Repas & primes :** ${mealsLine(meals)} ${
+          meals.fastFoodTotal > 0
+            ? `Passe à des paniers repas faits maison (un seul passage au marché pour la semaine) : vise **${formatFCFA(Math.round(meals.fastFoodTotal * 0.5))}** de courses au lieu de ${formatFCFA(meals.fastFoodTotal)} et mets la différence dans ton coffre dès que la prime tombe.`
+            : "Continue comme ça !"
+        }\n`
+      : ""
+  }- **Conseil actionnable pour ta question (« ${question.slice(0, 60)} ») :** Applique la méthode **50 / 30 / 20 adaptée à Abidjan** : 50% charges fixes (Loyer, CIE/SODECI, Transport, Nourriture), 20% Épargne intouchable dès la paie, 15% Tontine/Famille plafonnée, et 15% Loisirs/Chill.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -64,17 +95,19 @@ export async function POST(req: NextRequest) {
       message = "Analyse mes finances et donne-moi 3 conseils concrets.",
       wallets = [],
       transactions = [],
+      meals,
     }: {
       message: string;
       wallets: WalletInfo[];
       transactions: Transaction[];
+      meals?: MealsContext;
     } = body;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey || apiKey === "your_gemini_api_key") {
       return NextResponse.json({
-        reply: buildSmartFallbackReply(message, wallets, transactions),
+        reply: buildSmartFallbackReply(message, wallets, transactions, meals),
         mode: "local-smart-advisor",
       });
     }
@@ -95,6 +128,9 @@ Voici les données financières actuelles de l'utilisateur en FCFA :
           `[${t.type === "income" ? "+" : "-"}${t.amount} FCFA | ${t.category} | ${t.title} via ${t.walletId}]`
       )
       .join(" ; ")}
+
+${mealsLine(meals)}
+Si l'utilisateur fait des heures supplémentaires et dépense beaucoup en fast-food ou livraisons, alerte-le avec bienveillance et propose des paniers repas faits maison (courses groupées au marché) pour épargner sa prime.
 
 Question de l'utilisateur : ${message}
 `;

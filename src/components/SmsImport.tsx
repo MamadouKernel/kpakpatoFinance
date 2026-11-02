@@ -1,12 +1,18 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { useHousehold } from "@/context/HouseholdContext";
 import { INTERNAL_CATEGORY, formatFCFA } from "@/lib/finance-utils";
 import { isPartnerParty } from "@/lib/household-utils";
 import { ParsedSms, parseSmsBatch, smsKey } from "@/lib/sms-parser";
-import { TransactionCategory } from "@/types/finance";
+import {
+  consumePendingImport,
+  isClipboardWatchEnabled,
+  setClipboardWatchEnabled,
+  subscribePendingImport,
+} from "@/lib/import-inbox";
+import { TransactionCategory, WalletId } from "@/types/finance";
 import { MessageSquareText, X } from "lucide-react";
 
 const CATEGORIES: TransactionCategory[] = [
@@ -33,12 +39,15 @@ function describe(sms: ParsedSms): string {
       return `Paiement ${sms.merchant}`;
     case "wave_receive":
       return `Reçu de ${sms.sender}`;
+    case "generic_debit":
+      return sms.merchant ? `Paiement ${sms.merchant}` : "Compte débité";
+    case "generic_credit":
+      return "Compte crédité";
     default:
       return `Dépôt depuis ${sms.bank}`;
   }
 }
 
-const walletLabel = (sms: ParsedSms) => (sms.walletId === "wave" ? "Wave" : "Orange Money");
 
 /** Argent échangé avec le conjoint : numéro ou nom correspondant à son profil de foyer. */
 function isWithPartner(sms: ParsedSms, partner: Parameters<typeof isPartnerParty>[1]): boolean {
@@ -54,9 +63,27 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
   const { transactions, transfers, addTransaction, transferBetweenWallets, updateWalletBalance } =
     useFinance();
   const { partner } = useHousehold();
+  const { wallets } = useFinance();
+  const [walletOverrides, setWalletOverrides] = useState<Record<string, WalletId>>({});
+  const [watching, setWatching] = useState(false);
+  const walletName = (id: WalletId) => wallets.find((w) => w.id === id)?.shortName ?? id;
   const [text, setText] = useState("");
   const [categories, setCategories] = useState<Record<string, TransactionCategory>>({});
   const [done, setDone] = useState<string | null>(null);
+
+  // Texte déposé par le détecteur de presse-papiers ou par le partage Android.
+  useEffect(() => {
+    const take = () => {
+      const incoming = consumePendingImport();
+      if (incoming) {
+        setText(incoming);
+        setDone(null);
+      }
+      setWatching(isClipboardWatchEnabled());
+    };
+    take();
+    return subscribePendingImport(take);
+  }, []);
 
   const { parsed, unrecognized } = useMemo(() => parseSmsBatch(text), [text]);
 
@@ -69,7 +96,12 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
 
   const items = parsed.map((sms) => {
     const key = smsKey(sms);
-    return { sms, key, duplicate: knownKeys.has(key), internal: isWithPartner(sms, partner) };
+    return {
+      sms: { ...sms, walletId: walletOverrides[key] ?? sms.walletId },
+      key,
+      duplicate: knownKeys.has(key),
+      internal: isWithPartner(sms, partner),
+    };
   });
   const importable = items.filter((i, idx) => !i.duplicate && items.findIndex((o) => o.key === i.key) === idx);
 
@@ -99,7 +131,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
       }
       if (sms.fee > 0) {
         await addTransaction({
-          title: `Frais ${walletLabel(sms)}`,
+          title: `Frais ${walletName(sms.walletId)}`,
           amount: sms.fee,
           type: "expense",
           category: "Frais & Commissions",
@@ -129,6 +161,30 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
+      <p className="text-[11px] text-slate-400">
+        Collez un SMS, une notification (« compte débité / crédité ») ou un reçu. Sur Android, vous pouvez aussi
+        partager le texte vers Kpakpato.
+      </p>
+
+      <label className="flex items-start gap-2 text-xs text-slate-300">
+        <input
+          type="checkbox"
+          checked={watching}
+          onChange={async (e) => {
+            const on = e.target.checked;
+            setWatching(on);
+            setClipboardWatchEnabled(on);
+            // Déclenche tout de suite la demande d'autorisation du presse-papiers.
+            if (on) await navigator.clipboard?.readText().catch(() => undefined);
+          }}
+          className="mt-0.5"
+        />
+        <span>
+          Me proposer d&apos;importer quand je copie un SMS de transaction. Le texte copié n&apos;est lu que sur votre
+          appareil, et seulement quand vous revenez sur l&apos;app.
+        </span>
+      </label>
+
       <textarea
         value={text}
         onChange={(e) => {
@@ -157,11 +213,27 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
             </span>
           </div>
           <p className="mt-1 text-slate-400">
-            {walletLabel(sms)} · Frais {formatFCFA(sms.fee)} ·{" "}
+            {walletName(sms.walletId)} · Frais {formatFCFA(sms.fee)} ·{" "}
             {sms.balance !== null ? `Solde après : ${formatFCFA(sms.balance)}` : "Solde non indiqué"}
             {sms.date ? ` · ${new Date(sms.date).toLocaleString("fr-FR")}` : ""}
             {sms.txId ? ` · ID ${sms.txId}` : ""}
           </p>
+          {sms.walletGuessed && !duplicate && (
+            <label className="mt-2 flex items-center gap-2 text-amber-300">
+              Quel portefeuille ?
+              <select
+                value={walletOverrides[key] ?? sms.walletId}
+                onChange={(e) => setWalletOverrides((prev) => ({ ...prev, [key]: e.target.value as WalletId }))}
+                className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-white outline-none ring-1 ring-slate-600"
+              >
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.shortName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {internal && (
             <p className="mt-1 text-kpakpato-orange">
               Enregistré comme « Virement interne au foyer » : exclu de vos dépenses et revenus.

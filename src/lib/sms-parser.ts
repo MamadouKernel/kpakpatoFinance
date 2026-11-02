@@ -6,11 +6,15 @@ export type SmsKind =
   | "wave_deposit"
   | "wave_payment"
   | "wave_send"
-  | "wave_receive";
+  | "wave_receive"
+  | "generic_debit"
+  | "generic_credit";
 
 export interface ParsedSms {
   kind: SmsKind;
   walletId: WalletId;
+  /** Vrai quand le portefeuille a été deviné (le texte ne le dit pas clairement) : à confirmer. */
+  walletGuessed?: boolean;
   type: TransactionType;
   amount: number;
   fee: number;
@@ -61,21 +65,25 @@ const WAVE_DEPOSIT = new RegExp(
 // "Vous avez reçu 5000F de X". Les frais, le solde et l'ID sont lus à part (voir extractTail).
 const WAVE_PAYMENT = new RegExp(
   `(?:paiement\\s+(?:marchand\\s+)?(?:de|d['’])\\s*|vous\\s+avez\\s+pay[eé]\\s+)${NUM}${CUR}\\s+(?:[aà]|chez|au)\\s+(.+?)` +
-    `(?=\\s*[.,;(]|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
+    `(?=\\s*[.,;(]|\\s+effectu|\\s+avec\\s+succ|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
   "i"
 );
 
 const WAVE_SEND = new RegExp(
   `vous\\s+avez\\s+envoy[eé]\\s+${NUM}${CUR}\\s+(?:[aà])\\s+(.+?)` +
-    `(?=\\s*[.;]|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
+    `(?=\\s*[.;]|\\s+effectu|\\s+avec\\s+succ|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
   "i"
 );
 
 const WAVE_RECEIVE = new RegExp(
   `vous\\s+avez\\s+re[cç]u\\s+${NUM}${CUR}\\s+de\\s+(.+?)` +
-    `(?=\\s*[.;]|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
+    `(?=\\s*[.;]|\\s+effectu|\\s+avec\\s+succ|\\s+frais|\\s+solde|\\s+nouveau|\\s+id\\b|\\s+le\\s+\\d|$)`,
   "i"
 );
+
+// Notifications génériques : « Votre compte a été débité de 5 000 FCFA », « crédité de … ».
+const GENERIC_DEBIT = new RegExp(`(?:d[eé]bit[eé]|pr[eé]lev[eé]|d[eé]bit)\\s+(?:de\\s+)?${NUM}${CUR}`, "i");
+const GENERIC_CREDIT = new RegExp(`(?:cr[eé]dit[eé]|re[cç]u|approvisionn[eé])\\s+(?:de\\s+)?${NUM}${CUR}`, "i");
 
 const FEE_RE = new RegExp(`frais(?:\\s+(?:OM|wave|de\\s+transaction))?\\s*:?\\s*${NUM}(?:${CUR})?`, "i");
 const BALANCE_RE = new RegExp(`(?:nouveau\\s+)?solde(?:\\s+(?:wave|om|orange\\s+money))?\\s*:?\\s*${NUM}${CUR}`, "i");
@@ -149,6 +157,21 @@ function cleanText(text: string): string {
 /** Retire la ponctuation de fin de phrase accolée à un identifiant ("…A12345."). */
 function cleanId(id: string | undefined): string | undefined {
   return id?.replace(/[.\-_]+$/g, "") || undefined;
+}
+
+/** Devine le portefeuille d'après les mots du texte ; `guessed` vrai quand rien ne l'indique. */
+function guessWallet(raw: string, fallback: WalletId): { walletId: WalletId; guessed: boolean } {
+  if (/\bwave\b/i.test(raw)) return { walletId: "wave", guessed: false };
+  if (/orange|\bOM\b/i.test(raw)) return { walletId: "orange", guessed: false };
+  if (/\bmtn\b|momo/i.test(raw)) return { walletId: "mtn", guessed: false };
+  if (/\bmoov\b/i.test(raw)) return { walletId: "moov", guessed: false };
+  if (/djamo/i.test(raw)) return { walletId: "djamo", guessed: false };
+  return { walletId: fallback, guessed: true };
+}
+
+// Ces formats viennent de Wave : sans autre indication, c'est Wave (pas besoin de confirmation).
+function walletFields(raw: string): { walletId: WalletId } {
+  return { walletId: guessWallet(raw, "wave").walletId };
 }
 
 /** Nettoie un nom/numéro capturé : retire parenthèses vides, ponctuation de fin et espaces. */
@@ -230,7 +253,7 @@ export function parseSms(text: string): ParsedSms | null {
     const tail = extractTail(raw);
     return {
       kind: "wave_payment",
-      walletId: "wave",
+      ...walletFields(raw),
       type: "expense",
       amount,
       fee: tail.fee,
@@ -249,7 +272,7 @@ export function parseSms(text: string): ParsedSms | null {
     const tail = extractTail(raw);
     return {
       kind: "wave_send",
-      walletId: "wave",
+      ...walletFields(raw),
       type: "expense",
       amount,
       fee: tail.fee,
@@ -268,12 +291,53 @@ export function parseSms(text: string): ParsedSms | null {
     const tail = extractTail(raw);
     return {
       kind: "wave_receive",
-      walletId: "wave",
+      ...walletFields(raw),
       type: "income",
       amount,
       fee: tail.fee,
       balance: tail.balance,
       sender: cleanParty(m[2]),
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
+  m = raw.match(GENERIC_DEBIT);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (amount === null || amount <= 0) return null;
+    const tail = extractTail(raw);
+    const w = guessWallet(raw, "wave");
+    return {
+      kind: "generic_debit",
+      walletId: w.walletId,
+      ...(w.guessed ? { walletGuessed: true } : {}),
+      type: "expense",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      merchant: raw.match(MERCHANT_RE)?.[1] ? cleanParty(raw.match(MERCHANT_RE)![1]) : undefined,
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
+  m = raw.match(GENERIC_CREDIT);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (amount === null || amount <= 0) return null;
+    const tail = extractTail(raw);
+    const w = guessWallet(raw, "wave");
+    return {
+      kind: "generic_credit",
+      walletId: w.walletId,
+      ...(w.guessed ? { walletGuessed: true } : {}),
+      type: "income",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
       txId: tail.txId,
       date: tail.date,
       raw,
