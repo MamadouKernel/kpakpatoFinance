@@ -8,7 +8,9 @@ import {
   WalletInfo,
 } from "@/types/finance";
 import {
+  CUSTOM_WALLET_COLORS,
   DEFAULT_WALLETS,
+  buildCustomWallet,
   INITIAL_TRANSACTIONS,
   generateId,
   mergeCloudAndLocal,
@@ -57,6 +59,11 @@ interface FinanceContextType {
     options?: { date?: string; smsKey?: string }
   ) => Promise<void>;
   deleteTransfer: (id: string) => Promise<void>;
+  /** Crée un portefeuille personnalisé. Renvoie une erreur lisible, ou null si tout va bien. */
+  addWallet: (name: string, initialBalance: number, color: string) => string | null;
+  renameWallet: (id: WalletId, name: string, color?: string) => string | null;
+  /** Supprime un portefeuille personnalisé, seulement s'il n'a aucune opération. */
+  deleteWallet: (id: WalletId) => string | null;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
 }
@@ -248,6 +255,50 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     applyDelta(target.toWalletId, -target.amount);
   };
 
+  const nameTaken = (name: string, exceptId?: WalletId) =>
+    wallets.some(
+      (w) => w.id !== exceptId && w.shortName.trim().toLowerCase() === name.trim().toLowerCase()
+    );
+
+  const addWallet = (name: string, initialBalance: number, color: string) => {
+    const label = name.trim();
+    if (!label) return "Donnez un nom au portefeuille.";
+    if (nameTaken(label)) return "Un portefeuille porte déjà ce nom.";
+    if (wallets.length >= 20) return "Maximum 20 portefeuilles.";
+    if (!Number.isFinite(initialBalance) || initialBalance < 0) return "Solde de départ invalide.";
+    const palette = CUSTOM_WALLET_COLORS.some((c) => c.color === color) ? color : undefined;
+    setWallets((prev) => [
+      ...prev,
+      buildCustomWallet(generateId("w"), label, Math.round(initialBalance), palette),
+    ]);
+    return null;
+  };
+
+  const renameWallet = (id: WalletId, name: string, color?: string) => {
+    const target = wallets.find((w) => w.id === id);
+    if (!target?.custom) return "Seuls vos portefeuilles personnalisés peuvent être renommés.";
+    const label = name.trim();
+    if (!label) return "Donnez un nom au portefeuille.";
+    if (nameTaken(label, id)) return "Un portefeuille porte déjà ce nom.";
+    setWallets((prev) =>
+      prev.map((w) => (w.id === id ? buildCustomWallet(w.id, label, w.balance, color ?? w.color) : w))
+    );
+    return null;
+  };
+
+  const deleteWallet = (id: WalletId) => {
+    const target = wallets.find((w) => w.id === id);
+    if (!target?.custom) return "Les 6 portefeuilles de base ne peuvent pas être supprimés.";
+    const used =
+      transactions.some((t) => t.walletId === id) ||
+      transfers.some((t) => t.fromWalletId === id || t.toWalletId === id);
+    if (used) {
+      return "Ce portefeuille a des opérations : supprimez-les d'abord (ou gardez-le, il peut rester à 0).";
+    }
+    setWallets((prev) => prev.filter((w) => w.id !== id));
+    return null;
+  };
+
   const signInWithGoogle = async () => {
     if (!isFirebaseConfigured || !auth || !googleProvider) {
       alert(
@@ -280,6 +331,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         updateWalletBalance,
         transferBetweenWallets,
         deleteTransfer,
+        addWallet,
+        renameWallet,
+        deleteWallet,
         signInWithGoogle,
         signOutUser,
       }}

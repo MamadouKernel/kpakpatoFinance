@@ -220,7 +220,30 @@ export function generateId(prefix: string): string {
   return `${prefix}-${uuid}`;
 }
 
-const WALLET_IDS: WalletId[] = DEFAULT_WALLETS.map((w) => w.id);
+/** Couleurs proposées pour un portefeuille personnalisé (classes écrites en entier pour Tailwind). */
+export const CUSTOM_WALLET_COLORS = [
+  { color: "#8B5CF6", bgGradient: "from-[#8B5CF6] to-[#6D28D9]", textColor: "text-white" },
+  { color: "#EC4899", bgGradient: "from-[#EC4899] to-[#BE185D]", textColor: "text-white" },
+  { color: "#14B8A6", bgGradient: "from-[#14B8A6] to-[#0F766E]", textColor: "text-white" },
+  { color: "#F59E0B", bgGradient: "from-[#F59E0B] to-[#B45309]", textColor: "text-slate-950" },
+  { color: "#6366F1", bgGradient: "from-[#6366F1] to-[#4338CA]", textColor: "text-white" },
+  { color: "#84CC16", bgGradient: "from-[#84CC16] to-[#4D7C0F]", textColor: "text-slate-950" },
+];
+
+export function buildCustomWallet(id: string, name: string, balance: number, color?: string): WalletInfo {
+  const style = CUSTOM_WALLET_COLORS.find((c) => c.color === color) ?? CUSTOM_WALLET_COLORS[0];
+  const label = name.trim().slice(0, 24) || "Portefeuille";
+  return {
+    id,
+    name: label,
+    shortName: label,
+    ...style,
+    balance,
+    feeNote: "Portefeuille personnalisé",
+    custom: true,
+  };
+}
+
 const TX_TYPES = ["expense", "income"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -235,10 +258,28 @@ function isPositiveAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-/** Réconcilie des portefeuilles lus (localStorage/Firestore) avec les 6 portefeuilles par défaut. */
+/** Réconcilie des portefeuilles lus (localStorage/Firestore) avec les 6 par défaut, en gardant ceux créés par l'utilisateur. */
 export function sanitizeWallets(raw: unknown): WalletInfo[] {
   const saved = Array.isArray(raw) ? raw.filter(isRecord) : [];
-  return DEFAULT_WALLETS.map((def) => {
+  const defaultIds = new Set(DEFAULT_WALLETS.map((w) => w.id));
+  const custom: WalletInfo[] = [];
+  for (const w of saved) {
+    if (
+      w.custom === true &&
+      typeof w.id === "string" &&
+      w.id &&
+      !defaultIds.has(w.id) &&
+      !custom.some((c) => c.id === w.id) &&
+      typeof w.name === "string" &&
+      typeof w.balance === "number" &&
+      Number.isFinite(w.balance)
+    ) {
+      custom.push(
+        buildCustomWallet(w.id, w.name, Math.round(w.balance), typeof w.color === "string" ? w.color : undefined)
+      );
+    }
+  }
+  const defaults = DEFAULT_WALLETS.map((def) => {
     const match = saved.find((w) => w.id === def.id);
     const balance =
       match && typeof match.balance === "number" && Number.isFinite(match.balance)
@@ -246,6 +287,7 @@ export function sanitizeWallets(raw: unknown): WalletInfo[] {
         : def.balance;
     return { ...def, balance };
   });
+  return [...defaults, ...custom];
 }
 
 export function sanitizeTransactions(raw: unknown): Transaction[] {
@@ -260,7 +302,7 @@ export function sanitizeTransactions(raw: unknown): Transaction[] {
       TX_TYPES.includes(t.type) &&
       typeof t.category === "string" &&
       typeof t.walletId === "string" &&
-      WALLET_IDS.includes(t.walletId as WalletId) &&
+      t.walletId !== "" &&
       isValidDate(t.date)
   );
 }
@@ -273,9 +315,9 @@ export function sanitizeTransfers(raw: unknown): Transfer[] {
       typeof t.id === "string" &&
       isPositiveAmount(t.amount) &&
       typeof t.fromWalletId === "string" &&
-      WALLET_IDS.includes(t.fromWalletId as WalletId) &&
+      t.fromWalletId !== "" &&
       typeof t.toWalletId === "string" &&
-      WALLET_IDS.includes(t.toWalletId as WalletId) &&
+      t.toWalletId !== "" &&
       t.fromWalletId !== t.toWalletId &&
       isValidDate(t.date)
   );
@@ -293,7 +335,7 @@ export function transactionDelta(tx: Transaction): number {
  */
 export function mergeCloudAndLocal(
   cloud: { wallets: WalletInfo[]; transactions: Transaction[]; transfers: Transfer[] },
-  local: { transactions: Transaction[]; transfers: Transfer[] }
+  local: { wallets?: WalletInfo[]; transactions: Transaction[]; transfers: Transfer[] }
 ): { wallets: WalletInfo[]; transactions: Transaction[]; transfers: Transfer[] } {
   const cloudTxIds = new Set(cloud.transactions.map((t) => t.id));
   const cloudTransferIds = new Set(cloud.transfers.map((t) => t.id));
@@ -308,8 +350,15 @@ export function mergeCloudAndLocal(
     bump(t.toWalletId, t.amount);
   });
 
+  // Portefeuilles créés ici (hors ligne) et inconnus du cloud : leur solde local inclut déjà leurs opérations.
+  const cloudWalletIds = new Set(cloud.wallets.map((w) => w.id));
+  const localOnlyWallets = (local.wallets ?? []).filter((w) => w.custom && !cloudWalletIds.has(w.id));
+
   return {
-    wallets: cloud.wallets.map((w) => ({ ...w, balance: w.balance + (deltas.get(w.id) ?? 0) })),
+    wallets: [
+      ...cloud.wallets.map((w) => ({ ...w, balance: w.balance + (deltas.get(w.id) ?? 0) })),
+      ...localOnlyWallets,
+    ],
     transactions: [...localOnlyTx, ...cloud.transactions],
     transfers: [...localOnlyTransfers, ...cloud.transfers],
   };

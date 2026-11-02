@@ -51,6 +51,8 @@ interface HouseholdContextType {
   /** Faux tant que le document utilisateur n'a pas été lu. */
   profileLoaded: boolean;
   saveGender: (gender: Gender, other?: string) => Promise<void>;
+  /** Modifie mon profil (nom, genre, numéro, nom dans les SMS) et le répercute dans mon foyer. */
+  saveProfile: (p: { name: string; gender: Gender; genderOther?: string; phone?: string; alias?: string }) => Promise<void>;
   pastHouseholds: PastHousehold[];
   /** Message à afficher quand le foyer vient d'être dissocié (par l'autre membre ou par moi). */
   endedNotice: string | null;
@@ -122,7 +124,13 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
         setHouseholdId((d?.householdId as string | undefined) ?? null);
         setProfile(
           d?.gender === "femme" || d?.gender === "homme" || d?.gender === "autre"
-            ? { gender: d.gender, genderOther: d.genderOther }
+            ? {
+                gender: d.gender,
+                genderOther: d.genderOther,
+                name: typeof d.profileName === "string" ? d.profileName : undefined,
+                phone: typeof d.phone === "string" ? d.phone : undefined,
+                alias: typeof d.alias === "string" ? d.alias : undefined,
+              }
             : null
         );
         setPastHouseholds(Array.isArray(d?.pastHouseholds) ? d.pastHouseholds : []);
@@ -261,14 +269,14 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
 
   const requireAuth = () => {
     if (!db || !uid || !user) throw new Error("Connectez-vous pour utiliser l'Espace Couple.");
-    return { database: db, uid, displayName: user.displayName || user.email || "Moi" };
+    return { database: db, uid, displayName: profile?.name || user.displayName || user.email || "Moi" };
   };
 
   const cleanProfile = (extra: Omit<HouseholdMember, "name">) => ({
     ...(profile ? { gender: profile.gender } : {}),
     ...(profile?.gender === "autre" && profile.genderOther ? { genderOther: profile.genderOther } : {}),
-    ...(extra.phone?.trim() ? { phone: extra.phone.trim() } : {}),
-    ...(extra.alias?.trim() ? { alias: extra.alias.trim() } : {}),
+    ...((extra.phone?.trim() || profile?.phone) ? { phone: (extra.phone?.trim() || profile?.phone) as string } : {}),
+    ...((extra.alias?.trim() || profile?.alias) ? { alias: (extra.alias?.trim() || profile?.alias) as string } : {}),
   });
 
   const saveGender: HouseholdContextType["saveGender"] = async (gender, other) => {
@@ -280,6 +288,38 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
       { gender, genderOther: gender === "autre" ? precision : deleteField() },
       { merge: true }
     );
+  };
+
+  const saveProfile: HouseholdContextType["saveProfile"] = async (p) => {
+    const { database, uid: me } = requireAuth();
+    const name = p.name.trim();
+    const precision = p.genderOther?.trim();
+    if (!name) throw new Error("Le nom ne peut pas être vide.");
+    if (p.gender === "autre" && !precision) throw new Error("Veuillez préciser.");
+    const phone = p.phone?.trim();
+    const alias = p.alias?.trim();
+    await setDoc(
+      doc(database, "users", me),
+      {
+        profileName: name,
+        gender: p.gender,
+        genderOther: p.gender === "autre" ? precision : deleteField(),
+        phone: phone || deleteField(),
+        alias: alias || deleteField(),
+      },
+      { merge: true }
+    );
+    if (household) {
+      await updateDoc(doc(database, "households", household.id), {
+        [`members.${me}`]: {
+          name,
+          gender: p.gender,
+          ...(p.gender === "autre" && precision ? { genderOther: precision } : {}),
+          ...(phone ? { phone } : {}),
+          ...(alias ? { alias } : {}),
+        },
+      });
+    }
   };
 
   const createHousehold: HouseholdContextType["createHousehold"] = async (name, extra) => {
@@ -373,6 +413,14 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
 
   const updateMyProfile: HouseholdContextType["updateMyProfile"] = async (extra) => {
     const { database, uid: me, displayName } = requireAuth();
+    const phone = extra.phone?.trim();
+    const alias = extra.alias?.trim();
+    // Même valeurs dans « Mon profil » et dans l'Espace Couple.
+    await setDoc(
+      doc(database, "users", me),
+      { phone: phone || deleteField(), alias: alias || deleteField() },
+      { merge: true }
+    );
     if (!household) return;
     await updateDoc(doc(database, "households", household.id), {
       [`members.${me}`]: { name: displayName, ...cleanProfile(extra) },
@@ -399,6 +447,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
         loading,
         profile,
         profileLoaded,
+        saveProfile,
         saveGender,
         pastHouseholds,
         endedNotice,

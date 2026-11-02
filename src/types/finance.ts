@@ -1,4 +1,7 @@
-export type WalletId = "wave" | "orange" | "mtn" | "moov" | "djamo" | "cash";
+export type BuiltinWalletId = "wave" | "orange" | "mtn" | "moov" | "djamo" | "cash";
+
+/** Identifiant d'un portefeuille : l'un des 6 par défaut, ou celui d'un portefeuille créé par l'utilisateur. */
+export type WalletId = string;
 
 export type TransactionType = "expense" | "income";
 
@@ -27,6 +30,8 @@ export interface WalletInfo {
   textColor: string;
   balance: number;
   feeNote: string;
+  /** Portefeuille créé par l'utilisateur (modifiable et supprimable). */
+  custom?: boolean;
 }
 
 export interface Transaction {
@@ -75,6 +80,12 @@ export interface UserProfile {
   gender: Gender;
   /** Précision obligatoire quand gender === "autre". */
   genderOther?: string;
+  /** Nom d'affichage choisi par l'utilisateur (sinon celui de son compte Google). */
+  name?: string;
+  /** Numéro Mobile Money, pour reconnaître les virements entre conjoints. */
+  phone?: string;
+  /** Nom tel qu'il apparaît dans les SMS. */
+  alias?: string;
 }
 
 export interface HouseholdMember {

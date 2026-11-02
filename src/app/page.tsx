@@ -14,6 +14,7 @@ import IncomeBonus from "@/components/IncomeBonus";
 import SpaceSwitch from "@/components/SpaceSwitch";
 import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
+import ProfileModal from "@/components/ProfileModal";
 import { useHousehold } from "@/context/HouseholdContext";
 import { useFinance } from "@/context/FinanceContext";
 import { isFirebaseConfigured } from "@/lib/firebase";
@@ -26,6 +27,7 @@ import {
   LogIn,
   LogOut,
   RotateCcw,
+  UserCircle,
 } from "lucide-react";
 
 type MainTab = "dashboard" | "transactions" | "income" | "kpakpato";
@@ -36,6 +38,7 @@ export default function HomePage() {
     useFinance();
   const { space, profile, profileLoaded } = useHousehold();
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   // Texte partagé vers l'app (Android : Partager → Kpakpato) : on le dépose pour l'import.
   useEffect(() => {
@@ -117,6 +120,7 @@ export default function HomePage() {
     <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-slate-950 pb-24">
       <UpdateBanner />
       <OfflineBanner />
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
@@ -135,7 +139,7 @@ export default function HomePage() {
             </div>
             <p className="text-[11px] text-slate-400">
               {isCloudSynced
-                ? `Synchronisé Firebase (${user?.displayName || user?.email})`
+                ? `Synchronisé Firebase (${profile?.name || user?.displayName || user?.email})`
                 : "Mode Local Rapide • FCFA"}
             </p>
           </div>
@@ -151,6 +155,17 @@ export default function HomePage() {
           >
             <RotateCcw className="w-4 h-4" />
           </button>
+
+          {isCloudSynced && (
+            <button
+              onClick={() => setShowProfile(true)}
+              title="Mon profil"
+              aria-label="Mon profil"
+              className="rounded-xl bg-slate-900 border border-slate-800 p-2 text-slate-400 hover:text-white transition"
+            >
+              <UserCircle className="w-4 h-4" />
+            </button>
+          )}
 
           {user ? (
             <button
