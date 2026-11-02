@@ -486,7 +486,13 @@ function PastHouseholds({ items }: { items: PastHousehold[] }) {
               <p className="text-slate-400">
                 {h.partnerName ? `Avec ${h.partnerName} · ` : ""}
                 du {fmt(h.startedAt)} au {fmt(h.endedAt)} ·{" "}
-                {h.endedByMe ? "dissocié par vous" : "dissocié par l'autre membre"}
+                {h.endedByMe
+                  ? "dissocié par vous"
+                  : `dissocié par ${h.endedByName || "l'autre membre"}${
+                      h.endedByGender
+                        ? ` (${describeGender(h.endedByGender, h.endedByGenderOther).toLowerCase()})`
+                        : ""
+                    }`}
               </p>
             </div>
           ))}

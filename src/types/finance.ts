@@ -100,6 +100,10 @@ export interface Household {
   createdAt?: string;
   endedAt?: string;
   endedBy?: string;
+  /** Qui a mis fin au foyer : nom et genre, figés au moment de la dissociation. */
+  endedByName?: string;
+  endedByGender?: Gender;
+  endedByGenderOther?: string;
 }
 
 /** Trace d'un ancien foyer, conservée dans le compte de chaque ex-membre. */
@@ -110,4 +114,7 @@ export interface PastHousehold {
   startedAt?: string;
   endedAt: string;
   endedByMe: boolean;
+  endedByName?: string;
+  endedByGender?: Gender;
+  endedByGenderOther?: string;
 }

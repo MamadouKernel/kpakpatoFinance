@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { useFinance } from "@/context/FinanceContext";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
-import { generateInviteCode } from "@/lib/household-utils";
+import { describeGender, generateInviteCode } from "@/lib/household-utils";
 import { sanitizeTransactions, sanitizeWallets } from "@/lib/finance-utils";
 import type {
   Gender,
@@ -153,6 +153,9 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
           createdAt: d.createdAt,
           endedAt: d.endedAt,
           endedBy: d.endedBy,
+          endedByName: d.endedByName,
+          endedByGender: d.endedByGender,
+          endedByGenderOther: d.endedByGenderOther,
         });
       },
       // Accès refusé : je ne fais plus partie de ce foyer.
@@ -171,14 +174,23 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     archivedRef.current = rawHousehold.id;
 
     const otherId = rawHousehold.memberIds.find((id) => id !== uid);
+    // Qui a dissocié : valeurs figées à la dissociation, sinon profil du membre concerné.
+    const ender = rawHousehold.endedBy ? rawHousehold.members[rawHousehold.endedBy] : undefined;
+    const endedByName = rawHousehold.endedByName || ender?.name;
+    const endedByGender = rawHousehold.endedByGender || ender?.gender;
+    const endedByGenderOther = rawHousehold.endedByGenderOther || ender?.genderOther;
     const entry: PastHousehold = {
       id: rawHousehold.id,
       name: rawHousehold.name,
       partnerName: (otherId && rawHousehold.members[otherId]?.name) || "",
       endedAt: rawHousehold.endedAt || new Date().toISOString(),
       endedByMe: rawHousehold.endedBy === uid,
+      ...(endedByName ? { endedByName } : {}),
+      ...(endedByGender ? { endedByGender } : {}),
+      ...(endedByGender === "autre" && endedByGenderOther ? { endedByGenderOther } : {}),
       ...(rawHousehold.createdAt ? { startedAt: rawHousehold.createdAt } : {}),
     };
+    const who = describeGender(endedByGender, endedByGenderOther).toLowerCase();
 
     (async () => {
       try {
@@ -191,7 +203,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
         setEndedNotice(
           entry.endedByMe
             ? "Foyer dissocié. Vos données ne sont plus visibles par votre ex-conjoint(e), et inversement."
-            : `${entry.partnerName || "Votre conjoint(e)"} a mis fin au foyer. Vos données ne sont plus partagées.`
+            : `${endedByName || "Votre conjoint(e)"}${who ? ` (${who})` : ""} a mis fin au foyer. Vos données ne sont plus partagées.`
         );
         setSpaceState("personal");
       } catch (err) {
@@ -320,7 +332,15 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
 
     // Couple : le foyer est dissocié pour les deux. Le nettoyage de chaque compte
     // (retrait des données partagées, archivage) est fait par l'effet ci-dessus.
-    await updateDoc(ref, { status: "dissolved", endedAt: new Date().toISOString(), endedBy: me });
+    const self = household.members[me];
+    await updateDoc(ref, {
+      status: "dissolved",
+      endedAt: new Date().toISOString(),
+      endedBy: me,
+      endedByName: self?.name || user?.displayName || user?.email || "",
+      ...(profile ? { endedByGender: profile.gender } : {}),
+      ...(profile?.gender === "autre" && profile.genderOther ? { endedByGenderOther: profile.genderOther } : {}),
+    });
     await deleteDoc(doc(database, "householdInvites", household.inviteCode)).catch(() => undefined);
   };
 
