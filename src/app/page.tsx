@@ -152,8 +152,8 @@ export default function HomePage() {
             </div>
             <p className="text-[11px] text-slate-400">
               {isCloudSynced
-                ? `Synchronisé Firebase (${profile?.name || user?.displayName || user?.email})`
-                : "Mode Local Rapide • FCFA"}
+                ? "✔ Données sauvegardées • FCFA"
+                : "Non sauvegardé • FCFA"}
             </p>
           </div>
         </div>
