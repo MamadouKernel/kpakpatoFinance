@@ -10,6 +10,7 @@ import InstallButton from "@/components/InstallButton";
 import UpdateBanner from "@/components/UpdateBanner";
 import OfflineBanner from "@/components/OfflineBanner";
 import ClipboardWatcher from "@/components/ClipboardWatcher";
+import CompanionInbox from "@/components/CompanionInbox";
 import { setPendingImport } from "@/lib/import-inbox";
 import IncomeBonus from "@/components/IncomeBonus";
 import SpaceSwitch from "@/components/SpaceSwitch";
@@ -122,6 +123,7 @@ export default function HomePage() {
       <UpdateBanner />
       <OfflineBanner />
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+      <CompanionInbox />
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">

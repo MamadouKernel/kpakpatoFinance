@@ -35,6 +35,11 @@ service cloud.firestore {
     // (portefeuilles, transactions, transferts, genre, householdId, anciens foyers).
     match /users/{userId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
+
+      // Boîte de réception alimentée par l'app Android compagnon (textes de notifications / SMS à importer).
+      match /inbox/{itemId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
     }
 
     // Foyer (2 membres maximum). Une fois dissocié, il est figé : il ne reste que la trace.
