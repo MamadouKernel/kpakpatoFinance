@@ -7,6 +7,7 @@ import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
 import InstallButton from "@/components/InstallButton";
 import UpdateBanner from "@/components/UpdateBanner";
 import SpaceSwitch from "@/components/SpaceSwitch";
+import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
 import { useHousehold } from "@/context/HouseholdContext";
 import { useFinance } from "@/context/FinanceContext";
@@ -27,7 +28,7 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
   const { user, isCloudSynced, authLoading, signInWithGoogle, signOutUser, resetData } =
     useFinance();
-  const { space } = useHousehold();
+  const { space, profile, profileLoaded } = useHousehold();
   const [signInError, setSignInError] = useState<string | null>(null);
 
   // Register PWA Service Worker
@@ -82,6 +83,18 @@ export default function HomePage() {
         </div>
       );
     }
+  }
+
+  // Première connexion : le genre est demandé avant d'entrer dans l'app.
+  if (isFirebaseConfigured && user) {
+    if (!profileLoaded) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">
+          Chargement…
+        </div>
+      );
+    }
+    if (!profile) return <GenderOnboarding />;
   }
 
   return (

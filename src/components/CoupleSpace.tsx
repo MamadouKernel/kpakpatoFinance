@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Copy, LogOut, Users } from "lucide-react";
+import { Copy, History, LogOut, Share2, Users } from "lucide-react";
 import { useFinance } from "@/context/FinanceContext";
 import { useHousehold } from "@/context/HouseholdContext";
 import {
@@ -11,7 +11,8 @@ import {
   parseFcfaInput,
 } from "@/lib/finance-utils";
 import { isFirebaseConfigured } from "@/lib/firebase";
-import type { WalletInfo } from "@/types/finance";
+import { describeGender, partnerWord } from "@/lib/household-utils";
+import type { PastHousehold, WalletInfo } from "@/types/finance";
 
 const card = "rounded-2xl border border-slate-700/60 bg-slate-800/80 p-4";
 const input =
@@ -52,6 +53,9 @@ export default function CoupleSpace() {
     leaveHousehold,
     updateMyProfile,
     setMonthlyBudget,
+    pastHouseholds,
+    endedNotice,
+    dismissEndedNotice,
   } = useHousehold();
 
   const [name, setName] = useState("");
@@ -96,47 +100,66 @@ export default function CoupleSpace() {
     return <div className={`${card} text-sm text-slate-400`}>Chargement du foyer…</div>;
   }
 
-  // ── Pas encore de foyer : créer ou rejoindre ───────────────────────────────
+  // ── Pas (ou plus) de foyer : générer un code ou saisir celui de l'autre ────
   if (!household) {
     return (
       <div className="space-y-4">
+        {endedNotice && (
+          <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
+            <p className="text-xs font-semibold text-amber-200">{endedNotice}</p>
+            <button onClick={dismissEndedNotice} className="text-xs font-bold text-amber-300">
+              OK
+            </button>
+          </div>
+        )}
+
         <div className={card}>
           <h2 className="flex items-center gap-2 text-sm font-extrabold text-white">
-            <Users className="h-4 w-4 text-kpakpato-orange" /> Créer un foyer
+            <Users className="h-4 w-4 text-kpakpato-orange" /> Lier mon compte à celui de mon / ma partenaire
           </h2>
           <p className="mt-1 text-xs text-slate-400">
-            Vous obtenez un code à donner à votre conjoint(e) pour lier vos deux comptes.
+            Comme un appairage Bluetooth : l&apos;un(e) de vous génère un code, l&apos;autre le saisit. Peu importe qui
+            commence, homme ou femme.
           </p>
+        </div>
+
+        <div className={card}>
+          <h3 className="text-sm font-extrabold text-white">1. Je génère le code</h3>
+          <p className="mt-1 text-xs text-slate-400">Vous le donnez ensuite à votre partenaire pour qu&apos;il/elle se connecte.</p>
           <div className="mt-3 space-y-2">
             <input className={input} placeholder="Nom du foyer (ex. Famille Konaté)" value={name} onChange={(e) => setName(e.target.value)} />
-            <input className={input} inputMode="tel" placeholder="Votre numéro Mobile Money (ex. 07 07 07 07 07)" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <input className={input} placeholder="Votre nom dans les SMS (optionnel)" value={alias} onChange={(e) => setAlias(e.target.value)} />
+            <input className={input} inputMode="tel" placeholder="Mon numéro Mobile Money (ex. 07 07 07 07 07)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <input className={input} placeholder="Mon nom dans les SMS (optionnel)" value={alias} onChange={(e) => setAlias(e.target.value)} />
             <button className={primaryBtn} disabled={busy} onClick={() => run(() => createHousehold(name, { phone, alias }))}>
-              Créer le foyer
+              Générer mon code
             </button>
           </div>
         </div>
 
         <div className={card}>
-          <h2 className="text-sm font-extrabold text-white">Rejoindre avec un code</h2>
+          <h3 className="text-sm font-extrabold text-white">2. J&apos;ai reçu un code</h3>
+          <p className="mt-1 text-xs text-slate-400">Saisissez le code que votre partenaire a généré.</p>
           <div className="mt-3 space-y-2">
-            <input className={`${input} uppercase tracking-widest`} placeholder="CODE D'INVITATION" value={code} onChange={(e) => setCode(e.target.value)} maxLength={12} />
-            <input className={input} inputMode="tel" placeholder="Votre numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <input className={input} placeholder="Votre nom dans les SMS (optionnel)" value={alias} onChange={(e) => setAlias(e.target.value)} />
+            <input className={`${input} uppercase tracking-widest`} placeholder="CODE" value={code} onChange={(e) => setCode(e.target.value)} maxLength={12} />
+            <input className={input} inputMode="tel" placeholder="Mon numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <input className={input} placeholder="Mon nom dans les SMS (optionnel)" value={alias} onChange={(e) => setAlias(e.target.value)} />
             <button className={primaryBtn} disabled={busy || code.trim().length < 6} onClick={() => run(() => joinHousehold(code, { phone, alias }))}>
-              Rejoindre le foyer
+              Me connecter avec ce code
             </button>
           </div>
         </div>
 
         {error && <p className="text-xs font-semibold text-rose-400">{error}</p>}
+
+        <PastHouseholds items={pastHouseholds} />
       </div>
     );
   }
 
   // ── Foyer actif ────────────────────────────────────────────────────────────
   const myName = household.members[user.uid]?.name || "Moi";
-  const partnerName = partner?.name || "Conjoint(e)";
+  const word = partnerWord(partner?.gender);
+  const partnerName = partner?.name || word;
   const myTotal = sumWallets(wallets);
   const partnerTotal = partnerData ? sumWallets(partnerData.wallets) : 0;
   const total = myTotal + partnerTotal;
@@ -176,8 +199,10 @@ export default function CoupleSpace() {
 
       {!partnerUid && (
         <div className={card}>
-          <p className="text-sm font-bold text-white">Invitez votre conjoint(e)</p>
-          <p className="mt-1 text-xs text-slate-400">Donnez-lui ce code : il/elle le saisit dans « Rejoindre avec un code ».</p>
+          <p className="text-sm font-bold text-white">Donnez ce code à votre partenaire</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Il/elle ouvre l&apos;Espace Couple, puis « J&apos;ai reçu un code », et le saisit. Le code ne sert qu&apos;à vous lier tous les deux.
+          </p>
           <div className="mt-3 flex items-center gap-2">
             <code className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-center text-lg font-black tracking-[0.3em] text-kpakpato-orange">
               {household.inviteCode}
@@ -197,6 +222,19 @@ export default function CoupleSpace() {
             >
               <Copy className="h-4 w-4" />
             </button>
+            {typeof navigator !== "undefined" && "share" in navigator && (
+              <button
+                onClick={() =>
+                  navigator
+                    .share({ text: `Rejoins mon foyer sur Kpakpato Finance avec ce code : ${household.inviteCode}` })
+                    .catch(() => undefined)
+                }
+                className="rounded-lg bg-slate-700 p-2.5 text-white"
+                title="Partager"
+              >
+                <Share2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
           {copied && <p className="mt-1 text-xs text-emerald-400">Code copié.</p>}
         </div>
@@ -341,7 +379,8 @@ export default function CoupleSpace() {
         </div>
         {partner && (
           <p className="mt-3 text-[11px] text-slate-500">
-            Détecté pour {partnerName} : {partner.phone ? `n° ${partner.phone}` : "pas de numéro"}
+            {partnerName}{partner.gender ? ` (${describeGender(partner.gender, partner.genderOther).toLowerCase()})` : ""} :{" "}
+            {partner.phone ? `n° ${partner.phone}` : "pas de numéro"}
             {partner.alias ? ` · nom « ${partner.alias} »` : ""}
           </p>
         )}
@@ -350,16 +389,57 @@ export default function CoupleSpace() {
       {notice && <p className="text-xs font-semibold text-emerald-400">{notice}</p>}
       {error && <p className="text-xs font-semibold text-rose-400">{error}</p>}
 
-      <button
-        onClick={() => {
-          if (window.confirm("Quitter ce foyer ? Vous ne verrez plus les soldes de votre conjoint(e).")) {
-            run(leaveHousehold);
-          }
-        }}
-        className="mx-auto flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-400"
-      >
-        <LogOut className="h-3.5 w-3.5" /> Quitter le foyer
-      </button>
+      <PastHouseholds items={pastHouseholds} />
+
+      <div className={`${card} border-rose-500/30`}>
+        <h3 className="text-sm font-extrabold text-white">Dissocier le foyer</h3>
+        <p className="mt-1 text-xs text-slate-400">
+          Le foyer prend fin pour vous deux : vous ne verrez plus les soldes ni les dépenses de votre {word}, et
+          lui/elle ne verra plus les vôtres. Vos propres données restent intactes et une trace de ce foyer est
+          conservée dans votre historique. Vous pourrez ensuite créer un nouveau foyer.
+        </p>
+        <button
+          disabled={busy}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Dissocier « ${household.name} » ? Plus aucun de vous deux ne verra les données de l'autre. Cette action est définitive.`
+              )
+            ) {
+              run(leaveHousehold);
+            }
+          }}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-rose-500/50 py-2.5 text-xs font-bold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-40"
+        >
+          <LogOut className="h-3.5 w-3.5" /> Dissocier ce foyer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PastHouseholds({ items }: { items: PastHousehold[] }) {
+  if (items.length === 0) return null;
+  const fmt = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "—");
+  return (
+    <div className={card}>
+      <h3 className="flex items-center gap-2 text-sm font-extrabold text-white">
+        <History className="h-4 w-4 text-slate-400" /> Anciens foyers
+      </h3>
+      <div className="mt-3 space-y-2">
+        {[...items]
+          .sort((a, b) => b.endedAt.localeCompare(a.endedAt))
+          .map((h) => (
+            <div key={h.id} className="rounded-xl bg-slate-900/70 p-3 text-xs">
+              <p className="font-bold text-slate-100">{h.name}</p>
+              <p className="text-slate-400">
+                {h.partnerName ? `Avec ${h.partnerName} · ` : ""}
+                du {fmt(h.startedAt)} au {fmt(h.endedAt)} ·{" "}
+                {h.endedByMe ? "dissocié par vous" : "dissocié par l'autre membre"}
+              </p>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }

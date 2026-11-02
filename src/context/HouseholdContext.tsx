@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   arrayRemove,
   arrayUnion,
@@ -17,7 +17,15 @@ import { useFinance } from "@/context/FinanceContext";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { generateInviteCode } from "@/lib/household-utils";
 import { sanitizeTransactions, sanitizeWallets } from "@/lib/finance-utils";
-import type { Household, HouseholdMember, Transaction, WalletInfo } from "@/types/finance";
+import type {
+  Gender,
+  Household,
+  HouseholdMember,
+  PastHousehold,
+  Transaction,
+  UserProfile,
+  WalletInfo,
+} from "@/types/finance";
 
 export type Space = "personal" | "couple";
 
@@ -35,8 +43,18 @@ interface HouseholdContextType {
   partner: HouseholdMember | null;
   partnerData: MemberData | null;
   loading: boolean;
+  /** Genre choisi à la création du compte (null tant que non renseigné). */
+  profile: UserProfile | null;
+  /** Faux tant que le document utilisateur n'a pas été lu. */
+  profileLoaded: boolean;
+  saveGender: (gender: Gender, other?: string) => Promise<void>;
+  pastHouseholds: PastHousehold[];
+  /** Message à afficher quand le foyer vient d'être dissocié (par l'autre membre ou par moi). */
+  endedNotice: string | null;
+  dismissEndedNotice: () => void;
   createHousehold: (name: string, profile: Omit<HouseholdMember, "name">) => Promise<void>;
   joinHousehold: (code: string, profile: Omit<HouseholdMember, "name">) => Promise<void>;
+  /** Met fin au foyer : plus personne ne voit les données de l'autre, la trace est conservée. */
   leaveHousehold: () => Promise<void>;
   updateMyProfile: (profile: Omit<HouseholdMember, "name">) => Promise<void>;
   setMonthlyBudget: (amount: number) => Promise<void>;
@@ -52,7 +70,12 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   const { user, wallets, transactions, cloudReady } = useFinance();
   const [space, setSpaceState] = useState<Space>("personal");
   const [householdId, setHouseholdId] = useState<string | null>(null);
-  const [household, setHousehold] = useState<Household | null>(null);
+  const [rawHousehold, setRawHousehold] = useState<Household | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [pastHouseholds, setPastHouseholds] = useState<PastHousehold[]>([]);
+  const [endedNotice, setEndedNotice] = useState<string | null>(null);
+  const archivedRef = useRef<string | null>(null);
   const [partnerData, setPartnerData] = useState<MemberData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -76,48 +99,107 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   const uid = user?.uid ?? null;
   const active = Boolean(isFirebaseConfigured && db && uid);
 
-  // Foyer rattaché à mon compte.
+  // Mon document : foyer rattaché, genre, anciens foyers.
   useEffect(() => {
     if (!active || !db || !uid) {
       setHouseholdId(null);
-      setHousehold(null);
+      setRawHousehold(null);
+      setProfile(null);
+      setProfileLoaded(false);
+      setPastHouseholds([]);
       return;
     }
     setLoading(true);
     return onSnapshot(
       doc(db, "users", uid),
       (snap) => {
-        setHouseholdId((snap.data()?.householdId as string | undefined) ?? null);
+        const d = snap.data();
+        setHouseholdId((d?.householdId as string | undefined) ?? null);
+        setProfile(
+          d?.gender === "femme" || d?.gender === "homme" || d?.gender === "autre"
+            ? { gender: d.gender, genderOther: d.genderOther }
+            : null
+        );
+        setPastHouseholds(Array.isArray(d?.pastHouseholds) ? d.pastHouseholds : []);
+        setProfileLoaded(true);
         setLoading(false);
       },
-      () => setLoading(false)
+      () => {
+        setProfileLoaded(true);
+        setLoading(false);
+      }
     );
   }, [active, uid]);
 
   // Document du foyer.
   useEffect(() => {
     if (!db || !householdId) {
-      setHousehold(null);
+      setRawHousehold(null);
       return;
     }
     return onSnapshot(
       doc(db, "households", householdId),
       (snap) => {
         const d = snap.data();
-        if (!snap.exists() || !d) return setHousehold(null);
-        setHousehold({
+        if (!snap.exists() || !d) return setRawHousehold(null);
+        setRawHousehold({
           id: snap.id,
           name: d.name ?? "Notre foyer",
           memberIds: Array.isArray(d.memberIds) ? d.memberIds : [],
           members: d.members ?? {},
           inviteCode: d.inviteCode ?? "",
           monthlyBudget: typeof d.monthlyBudget === "number" ? d.monthlyBudget : 0,
+          status: d.status === "dissolved" || d.status === "cancelled" ? d.status : "active",
+          createdAt: d.createdAt,
+          endedAt: d.endedAt,
+          endedBy: d.endedBy,
         });
       },
       // Accès refusé : je ne fais plus partie de ce foyer.
-      () => setHousehold(null)
+      () => setRawHousehold(null)
     );
   }, [householdId]);
+
+  // Seul un foyer actif est exposé à l'app : un foyer dissocié n'est plus qu'une trace.
+  const household = rawHousehold?.status === "active" ? rawHousehold : null;
+
+  // Foyer dissocié (par moi ou par l'autre) : je range la trace dans mon compte,
+  // je retire mes données du foyer et je repars sans foyer.
+  useEffect(() => {
+    if (!db || !uid || !rawHousehold || rawHousehold.status !== "dissolved") return;
+    if (archivedRef.current === rawHousehold.id) return;
+    archivedRef.current = rawHousehold.id;
+
+    const otherId = rawHousehold.memberIds.find((id) => id !== uid);
+    const entry: PastHousehold = {
+      id: rawHousehold.id,
+      name: rawHousehold.name,
+      partnerName: (otherId && rawHousehold.members[otherId]?.name) || "",
+      endedAt: rawHousehold.endedAt || new Date().toISOString(),
+      endedByMe: rawHousehold.endedBy === uid,
+      ...(rawHousehold.createdAt ? { startedAt: rawHousehold.createdAt } : {}),
+    };
+
+    (async () => {
+      try {
+        await deleteDoc(doc(db!, "households", rawHousehold.id, "memberData", uid)).catch(() => undefined);
+        await setDoc(
+          doc(db!, "users", uid),
+          { householdId: deleteField(), pastHouseholds: arrayUnion(entry) },
+          { merge: true }
+        );
+        setEndedNotice(
+          entry.endedByMe
+            ? "Foyer dissocié. Vos données ne sont plus visibles par votre ex-conjoint(e), et inversement."
+            : `${entry.partnerName || "Votre conjoint(e)"} a mis fin au foyer. Vos données ne sont plus partagées.`
+        );
+        setSpaceState("personal");
+      } catch (err) {
+        archivedRef.current = null;
+        console.warn("Foyer : archivage impossible", err);
+      }
+    })();
+  }, [rawHousehold, uid]);
 
   const partnerUid = useMemo(
     () => household?.memberIds.find((id) => id !== uid) ?? null,
@@ -164,21 +246,35 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     return { database: db, uid, displayName: user.displayName || user.email || "Moi" };
   };
 
-  const cleanProfile = (profile: Omit<HouseholdMember, "name">) => ({
-    ...(profile.phone?.trim() ? { phone: profile.phone.trim() } : {}),
-    ...(profile.alias?.trim() ? { alias: profile.alias.trim() } : {}),
+  const cleanProfile = (extra: Omit<HouseholdMember, "name">) => ({
+    ...(profile ? { gender: profile.gender } : {}),
+    ...(profile?.gender === "autre" && profile.genderOther ? { genderOther: profile.genderOther } : {}),
+    ...(extra.phone?.trim() ? { phone: extra.phone.trim() } : {}),
+    ...(extra.alias?.trim() ? { alias: extra.alias.trim() } : {}),
   });
 
-  const createHousehold: HouseholdContextType["createHousehold"] = async (name, profile) => {
+  const saveGender: HouseholdContextType["saveGender"] = async (gender, other) => {
+    const { database, uid: me } = requireAuth();
+    const precision = other?.trim();
+    if (gender === "autre" && !precision) throw new Error("Veuillez préciser.");
+    await setDoc(
+      doc(database, "users", me),
+      { gender, genderOther: gender === "autre" ? precision : deleteField() },
+      { merge: true }
+    );
+  };
+
+  const createHousehold: HouseholdContextType["createHousehold"] = async (name, extra) => {
     const { database, uid: me, displayName } = requireAuth();
     const ref = doc(collection(database, "households"));
     const inviteCode = generateInviteCode();
     await setDoc(ref, {
       name: name.trim() || "Notre foyer",
       memberIds: [me],
-      members: { [me]: { name: displayName, ...cleanProfile(profile) } },
+      members: { [me]: { name: displayName, ...cleanProfile(extra) } },
       inviteCode,
       monthlyBudget: 0,
+      status: "active",
       createdAt: new Date().toISOString(),
     });
     await setDoc(doc(database, "householdInvites", inviteCode), {
@@ -188,7 +284,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     await setDoc(doc(database, "users", me), { householdId: ref.id }, { merge: true });
   };
 
-  const joinHousehold: HouseholdContextType["joinHousehold"] = async (rawCode, profile) => {
+  const joinHousehold: HouseholdContextType["joinHousehold"] = async (rawCode, extra) => {
     const { database, uid: me, displayName } = requireAuth();
     const code = rawCode.trim().toUpperCase();
     const invite = await getDoc(doc(database, "householdInvites", code));
@@ -197,7 +293,7 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     try {
       await updateDoc(doc(database, "households", hid), {
         memberIds: arrayUnion(me),
-        [`members.${me}`]: { name: displayName, ...cleanProfile(profile) },
+        [`members.${me}`]: { name: displayName, ...cleanProfile(extra) },
         lastJoinCode: code,
       });
     } catch {
@@ -209,20 +305,30 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   const leaveHousehold = async () => {
     const { database, uid: me } = requireAuth();
     if (!household) return;
-    await deleteDoc(doc(database, "households", household.id, "memberData", me)).catch(() => undefined);
-    await updateDoc(doc(database, "households", household.id), {
-      memberIds: arrayRemove(me),
-      [`members.${me}`]: deleteField(),
-    });
-    await setDoc(doc(database, "users", me), { householdId: deleteField() }, { merge: true });
-    setSpace("personal");
+    const ref = doc(database, "households", household.id);
+    const alone = household.memberIds.length < 2;
+
+    if (alone) {
+      // Invitation jamais utilisée : on annule simplement, sans laisser d'historique.
+      await updateDoc(ref, { status: "cancelled", endedAt: new Date().toISOString(), endedBy: me });
+      await deleteDoc(doc(database, "householdInvites", household.inviteCode)).catch(() => undefined);
+      await deleteDoc(doc(ref, "memberData", me)).catch(() => undefined);
+      await setDoc(doc(database, "users", me), { householdId: deleteField() }, { merge: true });
+      setSpace("personal");
+      return;
+    }
+
+    // Couple : le foyer est dissocié pour les deux. Le nettoyage de chaque compte
+    // (retrait des données partagées, archivage) est fait par l'effet ci-dessus.
+    await updateDoc(ref, { status: "dissolved", endedAt: new Date().toISOString(), endedBy: me });
+    await deleteDoc(doc(database, "householdInvites", household.inviteCode)).catch(() => undefined);
   };
 
-  const updateMyProfile: HouseholdContextType["updateMyProfile"] = async (profile) => {
+  const updateMyProfile: HouseholdContextType["updateMyProfile"] = async (extra) => {
     const { database, uid: me, displayName } = requireAuth();
     if (!household) return;
     await updateDoc(doc(database, "households", household.id), {
-      [`members.${me}`]: { name: displayName, ...cleanProfile(profile) },
+      [`members.${me}`]: { name: displayName, ...cleanProfile(extra) },
     });
   };
 
@@ -244,6 +350,12 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
         partner,
         partnerData,
         loading,
+        profile,
+        profileLoaded,
+        saveGender,
+        pastHouseholds,
+        endedNotice,
+        dismissEndedNotice: () => setEndedNotice(null),
         createHousehold,
         joinHousehold,
         leaveHousehold,

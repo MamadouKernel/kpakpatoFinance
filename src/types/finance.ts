@@ -68,13 +68,25 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export type Gender = "femme" | "homme" | "autre";
+
+export interface UserProfile {
+  gender: Gender;
+  /** Précision obligatoire quand gender === "autre". */
+  genderOther?: string;
+}
+
 export interface HouseholdMember {
   name: string;
+  gender?: Gender;
+  genderOther?: string;
   /** Numéro Mobile Money du membre : sert à reconnaître les virements entre conjoints. */
   phone?: string;
   /** Nom tel qu'il apparaît dans les SMS (ex. "KONATE AMINATA"). */
   alias?: string;
 }
+
+export type HouseholdStatus = "active" | "dissolved" | "cancelled";
 
 export interface Household {
   id: string;
@@ -84,4 +96,18 @@ export interface Household {
   inviteCode: string;
   /** Budget mensuel partagé en FCFA (0 = non défini). */
   monthlyBudget: number;
+  status: HouseholdStatus;
+  createdAt?: string;
+  endedAt?: string;
+  endedBy?: string;
+}
+
+/** Trace d'un ancien foyer, conservée dans le compte de chaque ex-membre. */
+export interface PastHousehold {
+  id: string;
+  name: string;
+  partnerName: string;
+  startedAt?: string;
+  endedAt: string;
+  endedByMe: boolean;
 }

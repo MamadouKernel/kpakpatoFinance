@@ -7,44 +7,58 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function household(householdId) {
+      return get(/databases/$(database)/documents/households/$(householdId)).data;
+    }
+
+    // Membre d'un foyer, quel que soit son statut (sert aussi à nettoyer après une dissociation).
     function isMember(householdId) {
-      return signedIn()
-        && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
+      return signedIn() && request.auth.uid in household(householdId).memberIds;
+    }
+
+    // Membre d'un foyer encore actif : seul cas où les données de l'autre sont lisibles.
+    function isActiveMember(householdId) {
+      return isMember(householdId) && household(householdId).get('status', 'active') == 'active';
     }
 
     // Chaque utilisateur ne lit et n'écrit que son propre document
-    // (portefeuilles, transactions, transferts et householdId).
+    // (portefeuilles, transactions, transferts, genre, householdId, anciens foyers).
     match /users/{userId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
 
-    // Foyer (2 membres maximum).
+    // Foyer (2 membres maximum). Une fois dissocié, il est figé : il ne reste que la trace.
     match /households/{householdId} {
       allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
 
       allow create: if signedIn()
-        && request.resource.data.memberIds == [request.auth.uid];
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.status == 'active';
 
-      allow update: if signedIn() && (
-        // Un membre modifie le foyer (nom, budget, profils) ou le quitte.
-        (request.auth.uid in resource.data.memberIds
-          && (request.resource.data.memberIds == resource.data.memberIds
-              || request.resource.data.memberIds == resource.data.memberIds.removeAll([request.auth.uid])))
-        // Un nouvel arrivant rejoint avec le bon code d'invitation.
-        || (!(request.auth.uid in resource.data.memberIds)
-            && resource.data.memberIds.size() < 2
-            && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
-            && request.resource.data.lastJoinCode == resource.data.inviteCode
-            && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['memberIds', 'members', 'lastJoinCode']))
-      );
+      allow update: if signedIn()
+        && resource.data.get('status', 'active') == 'active'
+        && (
+          // Un membre modifie le foyer (nom, budget, profils) ou y met fin.
+          (request.auth.uid in resource.data.memberIds
+            && request.resource.data.memberIds == resource.data.memberIds
+            && request.resource.data.get('status', 'active') in ['active', 'dissolved', 'cancelled'])
+          // Un nouvel arrivant rejoint avec le bon code d'invitation.
+          || (!(request.auth.uid in resource.data.memberIds)
+              && resource.data.memberIds.size() < 2
+              && request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid])
+              && request.resource.data.lastJoinCode == resource.data.inviteCode
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['memberIds', 'members', 'lastJoinCode']))
+        );
 
       allow delete: if false;
 
-      // Copie des soldes et dernières opérations de chaque membre, lisible par le foyer.
+      // Copie des soldes et dernières opérations de chaque membre.
+      // Lisible par l'autre membre uniquement tant que le foyer est actif.
       match /memberData/{memberUid} {
-        allow read: if isMember(householdId);
-        allow write: if isMember(householdId) && request.auth.uid == memberUid;
+        allow read: if isActiveMember(householdId);
+        allow write: if isActiveMember(householdId) && request.auth.uid == memberUid;
+        allow delete: if isMember(householdId) && request.auth.uid == memberUid;
       }
     }
 
@@ -54,7 +68,7 @@ service cloud.firestore {
       allow list, update: if false;
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
-        && isMember(request.resource.data.householdId);
+        && isActiveMember(request.resource.data.householdId);
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
 

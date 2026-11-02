@@ -1,4 +1,4 @@
-import type { HouseholdMember } from "@/types/finance";
+import type { Gender, HouseholdMember } from "@/types/finance";
 
 const digits = (value: string) => value.replace(/\D/g, "");
 
@@ -42,4 +42,24 @@ export function generateInviteCode(length = 8): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  femme: "Femme",
+  homme: "Homme",
+  autre: "Autre",
+};
+
+/** Mot employé pour désigner l'autre membre du couple, selon son genre. */
+export function partnerWord(gender: Gender | undefined): string {
+  if (gender === "homme") return "conjoint";
+  if (gender === "femme") return "conjointe";
+  if (gender === "autre") return "partenaire";
+  return "conjoint(e)";
+}
+
+/** "Femme", "Homme" ou "Autre (précision)". */
+export function describeGender(gender: Gender | undefined, other?: string): string {
+  if (!gender) return "";
+  return gender === "autre" && other ? `Autre (${other})` : GENDER_LABELS[gender];
 }
