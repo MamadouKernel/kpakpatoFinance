@@ -394,7 +394,8 @@ export default function CoupleSpace() {
           </li>
           <li>
             <b className="text-slate-200">Mon nom dans les SMS</b> : votre nom tel qu&apos;il apparaît dans les messages
-            (ex. KONATE AMINATA).
+            (ex. TRAORE ZEINAB). Peu importe les majuscules ou l&apos;ordre nom/prénom. Plusieurs noms possibles,
+            séparés par « ; » (ex. Zeinab Traoré ; Zeinab Konaté).
           </li>
         </ul>
         <div className="mt-3 space-y-2">

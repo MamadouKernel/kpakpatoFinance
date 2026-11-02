@@ -2,14 +2,69 @@ import type { Gender, HouseholdMember } from "@/types/finance";
 
 const digits = (value: string) => value.replace(/\D/g, "");
 
-const normalizeName = (value: string) =>
-  value
+// Mots d'état civil qui ne font pas partie du nom ("TRAORE ZEINAB épouse KONATE", "Mme …").
+const NOISE_WORDS = new Set(["epouse", "ep", "epse", "nee", "mme", "mlle", "madame", "mademoiselle", "mr", "monsieur", "dame"]);
+
+/** Ramène un mot à une forme phonétique simple : "Zeinab", "Zeynab" et "Zainab" donnent la même chose. */
+function phonetic(word: string): string {
+  return word
+    .replace(/y/g, "i")
+    .replace(/(ei|ai|ey|ay)/g, "i")
+    .replace(/ou/g, "u")
+    .replace(/ph/g, "f")
+    .replace(/(.)\1+/g, "$1"); // lettres doublées : "Konatte" → "Konate"
+}
+
+function normalizeName(value: string): string {
+  return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function nameWords(value: string): string[] {
+  return normalizeName(value)
+    .split(" ")
+    .filter((w) => w.length > 1 && !NOISE_WORDS.has(w))
+    .map(phonetic);
+}
+
+/** Distance d'édition entre deux mots (insertion, suppression, remplacement). */
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+/** Deux mots désignent le même nom : identiques, ou à une faute de frappe près (mots de 5 lettres et plus). */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  return Math.min(a.length, b.length) >= 5 && editDistance(a, b) <= 1;
+}
+
+/**
+ * Le nom saisi correspond au nom du SMS : ordre nom/prénom indifférent, majuscules, accents
+ * et variantes d'orthographe tolérés. Plusieurs noms possibles, séparés par « ; ».
+ */
+function matchesName(party: string, aliasList: string): boolean {
+  const partyWords = nameWords(party);
+  return aliasList
+    .split(/[;|]/)
+    .map(nameWords)
+    .filter((words) => words.length > 0)
+    .some((words) => words.every((w) => partyWords.some((p) => sameWord(w, p))));
+}
 
 /**
  * Vrai si la contrepartie d'un SMS (numéro et/ou nom) correspond au conjoint.
@@ -25,13 +80,7 @@ export function isPartnerParty(party: string | undefined, partner: HouseholdMemb
     if (partyDigits.length >= 8 && partyDigits.endsWith(tail)) return true;
   }
 
-  const alias = partner.alias ? normalizeName(partner.alias) : "";
-  if (alias.length >= 3) {
-    const name = normalizeName(party);
-    // Les mots du nom peuvent être dans un autre ordre ("KONATE AMINATA" / "Aminata Konate").
-    const words = alias.split(" ").filter((w) => w.length > 1);
-    if (name.includes(alias) || (words.length > 0 && words.every((w) => name.includes(w)))) return true;
-  }
+  if (partner.alias && matchesName(party, partner.alias)) return true;
 
   return false;
 }
