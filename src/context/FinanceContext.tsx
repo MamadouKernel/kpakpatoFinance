@@ -35,6 +35,7 @@ import {
   collection,
   doc,
   getDoc,
+  waitForPendingWrites,
   setDoc,
 } from "firebase/firestore";
 
@@ -311,6 +312,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const signOutUser = async () => {
     if (auth) {
+      // Opérations pas encore envoyées au cloud : on les laisse partir, ou on prévient l'utilisateur hors ligne.
+      if (db) {
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const ok = window.confirm(
+            "Vous êtes hors ligne : les opérations pas encore envoyées seront perdues si vous quittez. Quitter quand même ?"
+          );
+          if (!ok) return;
+        } else {
+          await Promise.race([waitForPendingWrites(db), new Promise((r) => setTimeout(r, 5000))]).catch(() => undefined);
+        }
+      }
       await fbSignOut(auth);
       // Les données restent dans le cloud : on vide l'appareil pour qu'elles ne soient ni visibles ni mélangées au compte suivant.
       try {

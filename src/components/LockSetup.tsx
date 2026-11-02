@@ -6,6 +6,9 @@ import { useFinance } from "@/context/FinanceContext";
 import {
   biometricSupported,
   disableBiometric,
+  getLockDelayMs,
+  LOCK_DELAYS,
+  setLockDelayMinutes,
   enableBiometric,
   hasBiometric,
   hasLock,
@@ -34,6 +37,11 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
 
   useEffect(() => {
     void biometricSupported().then(setBioOk);
+  }, []);
+
+  const [delay, setDelay] = useState(25);
+  useEffect(() => {
+    setDelay(getLockDelayMs() / 60_000);
   }, []);
 
   const locked = hasLock(uid);
@@ -98,6 +106,24 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
               </button>
             )}
           </div>
+          <label className="flex items-center justify-between gap-3 text-xs text-slate-300">
+            Reverrouiller après
+            <select
+              value={delay}
+              onChange={(e) => {
+                const m = Number(e.target.value);
+                setDelay(m);
+                setLockDelayMinutes(m);
+              }}
+              className="rounded-lg bg-slate-800 px-2 py-1.5 text-xs text-white outline-none ring-1 ring-slate-600"
+            >
+              {LOCK_DELAYS.map((m) => (
+                <option key={m} value={m}>
+                  {m} min d&apos;inactivité
+                </option>
+              ))}
+            </select>
+          </label>
         </>
       ) : (
         <>
@@ -144,7 +170,7 @@ export function LockSettings({ onDone }: { onDone?: () => void }) {
       )}
       {message && <p className="text-xs font-semibold text-amber-400">{message}</p>}
       <p className="text-[11px] text-slate-500">
-        Le code est lié à votre compte : il est valable sur tous vos appareils. L&apos;empreinte ou le visage se règle sur chaque appareil. L&apos;app se reverrouille après 25 minutes d&apos;inactivité.
+        Le code est lié à votre compte : il est valable sur tous vos appareils. L&apos;empreinte ou le visage se règle sur chaque appareil. Le délai de reverrouillage se règle sur chaque appareil.
       </p>
     </div>
   );

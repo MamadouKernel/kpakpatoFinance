@@ -7,6 +7,7 @@ import { LockSettings } from "@/components/LockSetup";
 import {
   clearCloudLock,
   consumeLockReset,
+  getLockDelayMs,
   hasBiometric,
   hasLock,
   markLockForReset,
@@ -16,9 +17,6 @@ import {
   unlockWithBiometric,
   verifyPin,
 } from "@/lib/app-lock";
-
-/** Inactivité (écran non touché, app ouverte ou en arrière-plan) au-delà de laquelle l'app se reverrouille. */
-const RELOCK_AFTER_MS = 25 * 60_000;
 
 type Phase = "checking" | "setup" | "locked" | "error";
 
@@ -60,7 +58,7 @@ export default function AppLock({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const expire = () => {
-      if (Date.now() - lastActive.current > RELOCK_AFTER_MS) setUnlockedFor(null);
+      if (Date.now() - lastActive.current > getLockDelayMs()) setUnlockedFor(null);
     };
     const touch = () => {
       expire();

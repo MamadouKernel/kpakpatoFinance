@@ -215,3 +215,24 @@ export async function unlockWithBiometric(uid: string): Promise<boolean> {
     return false;
   }
 }
+
+/** Durées d'inactivité proposées avant reverrouillage, en minutes. */
+export const LOCK_DELAYS = [5, 15, 25];
+const delayKey = "kpakpato_lock_delay_v1";
+
+export function getLockDelayMs(): number {
+  try {
+    const v = Number(localStorage.getItem(delayKey));
+    return (LOCK_DELAYS.includes(v) ? v : 25) * 60_000;
+  } catch {
+    return 25 * 60_000;
+  }
+}
+
+export function setLockDelayMinutes(minutes: number) {
+  try {
+    localStorage.setItem(delayKey, String(minutes));
+  } catch {
+    // ignoré
+  }
+}
