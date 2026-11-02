@@ -17,6 +17,7 @@ import SpaceSwitch from "@/components/SpaceSwitch";
 import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
 import ProfileModal from "@/components/ProfileModal";
+import PhoneConnect from "@/components/PhoneConnect";
 import { useHousehold } from "@/context/HouseholdContext";
 import { useFinance } from "@/context/FinanceContext";
 import { isFirebaseConfigured } from "@/lib/firebase";
@@ -30,6 +31,7 @@ import {
   LogOut,
   RotateCcw,
   UserCircle,
+  Smartphone,
 } from "lucide-react";
 
 type MainTab = "dashboard" | "transactions" | "income" | "kpakpato";
@@ -41,6 +43,7 @@ export default function HomePage() {
   const { space, profile, profileLoaded } = useHousehold();
   const [signInError, setSignInError] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
 
   // Texte partagé vers l'app (Android : Partager → Kpakpato) : on le dépose pour l'import.
   useEffect(() => {
@@ -123,6 +126,7 @@ export default function HomePage() {
       <UpdateBanner />
       <OfflineBanner />
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+      {showPhone && <PhoneConnect onClose={() => setShowPhone(false)} />}
       <CompanionInbox />
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
@@ -158,6 +162,17 @@ export default function HomePage() {
           >
             <RotateCcw className="w-4 h-4" />
           </button>
+
+          {isCloudSynced && (
+            <button
+              onClick={() => setShowPhone(true)}
+              title="Connecter mon téléphone"
+              aria-label="Connecter mon téléphone"
+              className="rounded-xl bg-slate-900 border border-slate-800 p-2 text-slate-400 hover:text-white transition"
+            >
+              <Smartphone className="w-4 h-4" />
+            </button>
+          )}
 
           {isCloudSynced && (
             <button

@@ -53,3 +53,9 @@ L'écran indique ✔ pour chaque étape et compte les messages envoyés.
 - **Google Play** : Google restreint la permission SMS. L'installation par APK n'est pas concernée.
 - **Import côté web** : l'écriture dans la boîte est immédiate, mais l'import dans vos portefeuilles se fait quand
   Kpakpato Finance est ouverte (le toast « Transaction importée depuis votre téléphone » l'indique).
+
+## Proposer le téléchargement depuis la plateforme
+
+La fenêtre « Connecter mon téléphone » de Kpakpato Finance affiche un bouton de téléchargement dès que le fichier
+`public/kpakpato-compagnon.apk` existe. Après avoir construit l'APK (signé avec votre clé de publication, dont le
+SHA-1 est enregistré dans Firebase), copiez-le sous ce nom dans `public/`, commitez et poussez : Vercel le servira.

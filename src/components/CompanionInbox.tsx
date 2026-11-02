@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
-import { collection, deleteDoc, doc, onSnapshot } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { useFinance } from "@/context/FinanceContext";
 import { useSmsImporter } from "@/hooks/useSmsImporter";
 import { db } from "@/lib/firebase";
@@ -40,11 +40,13 @@ export default function CompanionInbox() {
       if (draining.current) return;
       draining.current = true;
       let imported = 0;
+      let received = 0;
       let lastLabel = "";
       const toConfirm: string[] = [];
       try {
         while (queue.current.length > 0) {
           const item = queue.current.shift()!;
+          received += 1;
           const { parsed } = parseSmsBatch(item.text);
           if (parsed.length > 0) {
             const api = importerRef.current;
@@ -62,6 +64,14 @@ export default function CompanionInbox() {
         }
       } finally {
         draining.current = false;
+      }
+      // Trace de la dernière réception, affichée dans « Connecter mon téléphone ».
+      if (received > 0) {
+        void setDoc(
+          doc(database, "users", uid),
+          { companionLastAt: new Date().toISOString() },
+          { merge: true }
+        ).catch(() => undefined);
       }
       if (toConfirm.length > 0) setPendingImport(toConfirm.join("\n\n"));
       if (imported > 0 || toConfirm.length > 0) {
