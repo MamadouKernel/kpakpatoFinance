@@ -57,7 +57,6 @@ interface FinanceContextType {
     options?: { date?: string; smsKey?: string }
   ) => Promise<void>;
   deleteTransfer: (id: string) => Promise<void>;
-  resetData: () => void;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
 }
@@ -235,13 +234,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     applyDelta(target.toWalletId, -target.amount);
   };
 
-  const resetData = () => {
-    if (!window.confirm("Effacer tous les soldes et toutes les opérations ? Cette action est définitive.")) return;
-    setWallets(DEFAULT_WALLETS);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setTransfers([]);
-  };
-
   const signInWithGoogle = async () => {
     if (!isFirebaseConfigured || !auth || !googleProvider) {
       alert(
@@ -274,7 +266,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         updateWalletBalance,
         transferBetweenWallets,
         deleteTransfer,
-        resetData,
         signInWithGoogle,
         signOutUser,
       }}

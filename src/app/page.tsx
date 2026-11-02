@@ -26,7 +26,7 @@ type MainTab = "dashboard" | "transactions" | "kpakpato";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
-  const { user, isCloudSynced, authLoading, signInWithGoogle, signOutUser, resetData } =
+  const { user, isCloudSynced, authLoading, signInWithGoogle, signOutUser } =
     useFinance();
   const { space, profile, profileLoaded } = useHousehold();
   const [signInError, setSignInError] = useState<string | null>(null);
@@ -126,8 +126,9 @@ export default function HomePage() {
         <div className="flex items-center gap-1.5">
           <InstallButton compact />
           <button
-            onClick={resetData}
-            title="Effacer toutes les données"
+            onClick={() => window.location.reload()}
+            title="Actualiser l'application"
+            aria-label="Actualiser l'application"
             className="rounded-xl bg-slate-900 border border-slate-800 p-2 text-slate-400 hover:text-white transition"
           >
             <RotateCcw className="w-4 h-4" />
