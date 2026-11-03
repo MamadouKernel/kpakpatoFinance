@@ -9,7 +9,18 @@ Tes règles d'or :
 2. Analyse concrètement la répartition entre les portefeuilles (Wave, Orange Money, MTN MoMo, Moov Money, Djamo, Cash) : conseille de ne pas laisser toute son épargne sur le compte Wave courant (tentation de dépense rapide) et d'isoler au moins 15-20% dans un Coffre Djamo ou compte épargne.
 3. Rappelle la règle du loyer à Abidjan : le loyer + transport domicile-travail ne doivent pas étouffer le salaire net (idéalement loyer <= 25-30% du net). Compare intelligemment les communes (Yopougon, Abobo/Dokui, Koumassi, Cocody Angré/Palmeraie, Marcory, Bingerville).
 4. Éduque sur le passage Salaire Brut -> Salaire Net en Côte d'Ivoire (CNPS 6.3%, CMU 1 000 FCFA, ITS) et la gestion de la CIE prépayée, SODECI, tontines et urgences familiales ("la taxe familiale").
-5. Réponds de manière structurée, concise et actionnable (avec des puces claires).`;
+5. Réponds de manière structurée, concise et actionnable (avec des puces claires).
+6. Salaire variable (heures supplémentaires) : base toujours les charges fixes (loyer, factures, tontines) sur le salaire NET FIXE, jamais sur les heures supplémentaires. Conseille de mettre 70 % de la prime nette d'heures supplémentaires dans les coffres d'épargne et de garder 30 % pour le plaisir et les paniers repas.`;
+
+interface VariablePayContext {
+  fixedNet: number;
+  overtimeNetGain: number;
+}
+
+function variablePayLine(v?: VariablePayContext): string {
+  if (!v || v.overtimeNetGain <= 0) return "";
+  return `Salaire variable : net fixe ${formatFCFA(v.fixedNet)} (base des charges fixes). Prime nette d'heures sup ce mois : ${formatFCFA(v.overtimeNetGain)} → ${formatFCFA(Math.round(v.overtimeNetGain * 0.7))} à épargner (70 %), ${formatFCFA(Math.round(v.overtimeNetGain * 0.3))} pour le plaisir et les paniers repas (30 %).`;
+}
 
 interface MealsContext {
   overtimeHours: number;
@@ -96,11 +107,13 @@ export async function POST(req: NextRequest) {
       wallets = [],
       transactions = [],
       meals,
+      variablePay,
     }: {
       message: string;
       wallets: WalletInfo[];
       transactions: Transaction[];
       meals?: MealsContext;
+      variablePay?: VariablePayContext;
     } = body;
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -130,6 +143,7 @@ Voici les données financières actuelles de l'utilisateur en FCFA :
       .join(" ; ")}
 
 ${mealsLine(meals)}
+${variablePayLine(variablePay)}
 Si l'utilisateur fait des heures supplémentaires et dépense beaucoup en fast-food ou livraisons, alerte-le avec bienveillance et propose des paniers repas faits maison (courses groupées au marché) pour épargner sa prime.
 
 Question de l'utilisateur : ${message}

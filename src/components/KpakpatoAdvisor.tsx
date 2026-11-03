@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { useSalary } from "@/context/SalaryContext";
+import { netFromGross } from "@/lib/payroll";
 import { MEAL_BASKETS, analyzeMeals, mealContext } from "@/lib/meal-analysis";
 import {
   ABIDJAN_COMMUNES_RENT,
@@ -84,6 +85,14 @@ export default function KpakpatoAdvisor() {
           wallets,
           transactions,
           meals: mealContext(meals),
+          // Salaire variable : les charges fixes se basent sur le net fixe ; la prime d'heures sup se partage 70 % / 30 %.
+          variablePay:
+            meals.overtimeNetGain > 0
+              ? {
+                  fixedNet: netFromGross(salaryProfile.baseGross + salaryProfile.taxableBonuses, salaryProfile.parts).net,
+                  overtimeNetGain: Math.round(meals.overtimeNetGain),
+                }
+              : undefined,
         }),
       });
       const data = await res.json();

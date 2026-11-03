@@ -15,6 +15,7 @@ import ClipboardWatcher from "@/components/ClipboardWatcher";
 import { setPendingImport } from "@/lib/import-inbox";
 import { isNativeApp, nativeStatus } from "@/lib/native-bridge";
 import IncomeBonus from "@/components/IncomeBonus";
+import AbidjanPlanner from "@/components/AbidjanPlanner";
 import SpaceSwitch from "@/components/SpaceSwitch";
 import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
@@ -279,7 +280,12 @@ export default function HomePage() {
 
         {activeTab === "transactions" && <TransactionTracker />}
 
-        {activeTab === "income" && <IncomeBonus />}
+        {activeTab === "income" && (
+          <>
+            <IncomeBonus />
+            <AbidjanPlanner />
+          </>
+        )}
 
         {activeTab === "kpakpato" && <KpakpatoAdvisor />}
       </main>
