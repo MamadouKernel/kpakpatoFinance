@@ -2,10 +2,12 @@
 
 import { useMemo } from "react";
 import { useFinance } from "@/context/FinanceContext";
+import { useContacts } from "@/context/ContactsContext";
 import { useHousehold } from "@/context/HouseholdContext";
 import { INTERNAL_CATEGORY } from "@/lib/finance-utils";
 import { isPartnerParty } from "@/lib/household-utils";
 import { type ParsedSms, smsKey, smsSubtype } from "@/lib/sms-parser";
+import { categorizeByKeywords, categoryForContact } from "@/lib/smart-categorizer";
 import { type OpSignature, sameOperation, txKeyOf } from "@/lib/sms-dedupe";
 import type { TransactionCategory, WalletId } from "@/types/finance";
 
@@ -43,6 +45,10 @@ export function smsSignature(sms: ParsedSms, key: string): OpSignature {
   };
 }
 
+/** Destinataire ou marchand d'une dépense : sert à reconnaître un numéro déjà vu. */
+export const partyOfSms = (sms: ParsedSms): string | undefined =>
+  sms.type === "expense" ? sms.recipient ?? sms.merchant : undefined;
+
 export interface PreparedSms {
   sms: ParsedSms;
   key: string;
@@ -60,6 +66,7 @@ export function useSmsImporter() {
   const { wallets, transactions, transfers, addTransaction, transferBetweenWallets, updateWalletBalance } =
     useFinance();
   const { partner } = useHousehold();
+  const { lookup } = useContacts();
 
   const knownKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -87,9 +94,18 @@ export function useSmsImporter() {
   const walletName = (id: WalletId) => wallets.find((w) => w.id === id)?.shortName ?? id;
 
   const isWithPartner = (sms: ParsedSms) => {
+    // Numéro que l'utilisateur a déjà indiqué comme étant son conjoint.
+    if (lookup(sms.recipient ?? sms.sender)?.category === "partner") return true;
     if (sms.kind === "om_transfer" || sms.kind === "wave_send") return isPartnerParty(sms.recipient, partner);
     if (sms.kind === "wave_receive") return isPartnerParty(sms.sender, partner);
     return false;
+  };
+
+  /** Catégorie proposée sans rien demander : la mémoire des numéros d'abord, puis les mots-clés ivoiriens. */
+  const suggestedCategory = (sms: ParsedSms): TransactionCategory | null => {
+    const remembered = lookup(partyOfSms(sms));
+    if (remembered && remembered.category !== "partner") return categoryForContact(remembered.category);
+    return categorizeByKeywords(sms.merchant, sms.recipient, sms.raw);
   };
 
   const prepare = (parsed: ParsedSms[], walletOverrides: Record<string, WalletId> = {}): PreparedSms[] =>
@@ -132,7 +148,7 @@ export function useSmsImporter() {
           title: internal ? `Virement interne au foyer (${describeSms(sms).toLowerCase()})` : describeSms(sms),
           amount: sms.amount,
           type: sms.type,
-          category: internal ? INTERNAL_CATEGORY : categories[key] ?? "Autre",
+          category: internal ? INTERNAL_CATEGORY : categories[key] ?? suggestedCategory(sms) ?? "Autre",
           walletId: sms.walletId,
           date: sms.date,
           note,
@@ -140,6 +156,7 @@ export function useSmsImporter() {
           // Firestore refuse les valeurs undefined : on n'ajoute le champ que pour une dépense.
           ...(smsSubtype(sms) ? { subtype: smsSubtype(sms) } : {}),
           ...(sms.balance !== null ? { smsBalance: sms.balance } : {}),
+          ...(partyOfSms(sms) ? { party: partyOfSms(sms) } : {}),
         });
       }
       if (sms.fee > 0) {
@@ -158,5 +175,5 @@ export function useSmsImporter() {
     return { count: ordered.length, recalibrated: ordered.some(({ sms }) => sms.balance !== null) };
   };
 
-  return { wallets, walletName, prepare, importable, importItems };
+  return { wallets, walletName, prepare, importable, importItems, suggestedCategory };
 }

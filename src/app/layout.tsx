@@ -5,6 +5,7 @@ import { HouseholdProvider } from "@/context/HouseholdContext";
 import { SalaryProvider } from "@/context/SalaryContext";
 import { CommunityProvider } from "@/context/CommunityContext";
 import AppLock from "@/components/AppLock";
+import { ContactsProvider } from "@/context/ContactsContext";
 
 export const metadata: Metadata = {
   title: "Kpakpato Finance | Gestion Portefeuilles & Coach IA Abidjan",
@@ -43,11 +44,13 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-kpakpato-orange selection:text-white">
         <FinanceProvider>
           <AppLock>
-            <HouseholdProvider>
-              <SalaryProvider>
-                <CommunityProvider>{children}</CommunityProvider>
-              </SalaryProvider>
-            </HouseholdProvider>
+            <ContactsProvider>
+              <HouseholdProvider>
+                <SalaryProvider>
+                  <CommunityProvider>{children}</CommunityProvider>
+                </SalaryProvider>
+              </HouseholdProvider>
+            </ContactsProvider>
           </AppLock>
         </FinanceProvider>
       </body>

@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
 import WeeklyReport from "@/components/WeeklyReport";
+import ContactPrompt from "@/components/ContactPrompt";
+import FixedBillsAlert from "@/components/FixedBillsAlert";
 import TontineSection from "@/components/TontineSection";
 import KpakpatoAdvisor from "@/components/KpakpatoAdvisor";
 import InstallButton from "@/components/InstallButton";
@@ -248,7 +250,9 @@ export default function HomePage() {
         {activeTab === "dashboard" && !(space === "couple" && isCloudSynced) && (
           <>
             <WalletGrid />
+            <ContactPrompt />
             <WeeklyReport />
+            <FixedBillsAlert />
             <TontineSection />
             {/* Carte d'appel rapide au conseiller Kpakpato */}
             <div

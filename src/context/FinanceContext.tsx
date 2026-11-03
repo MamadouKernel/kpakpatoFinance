@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   Transaction,
+  TransactionCategory,
   Transfer,
   WalletId,
   WalletInfo,
@@ -54,6 +55,8 @@ interface FinanceContextType {
   cloudReady: boolean;
   addTransaction: (tx: Omit<Transaction, "id" | "date"> & { date?: string }) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  /** Change la catégorie d'opérations (sans toucher aux soldes). */
+  recategorizeTransactions: (ids: string[], category: TransactionCategory) => void;
   updateWalletBalance: (walletId: WalletId, newBalance: number) => Promise<void>;
   transferBetweenWallets: (
     fromWalletId: WalletId,
@@ -213,6 +216,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     applyDelta(newTx.walletId, transactionDelta(newTx));
   };
 
+  const recategorizeTransactions = (ids: string[], category: TransactionCategory) => {
+    if (ids.length === 0) return;
+    const set = new Set(ids);
+    setTransactions((prev) => prev.map((t) => (set.has(t.id) ? { ...t, category } : t)));
+  };
+
   const deleteTransaction = async (id: string) => {
     const target = transactions.find((t) => t.id === id);
     if (!target) return;
@@ -358,6 +367,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         cloudReady,
         addTransaction,
         deleteTransaction,
+        recategorizeTransactions,
         updateWalletBalance,
         transferBetweenWallets,
         deleteTransfer,

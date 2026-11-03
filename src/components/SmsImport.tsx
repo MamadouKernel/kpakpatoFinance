@@ -29,7 +29,7 @@ const CATEGORIES: TransactionCategory[] = [
 ];
 
 export default function SmsImport({ onClose }: { onClose: () => void }) {
-  const { wallets, walletName, prepare, importable: pickImportable, importItems } = useSmsImporter();
+  const { wallets, walletName, prepare, importable: pickImportable, importItems, suggestedCategory } = useSmsImporter();
   const [walletOverrides, setWalletOverrides] = useState<Record<string, WalletId>>({});
   const [watching, setWatching] = useState(false);
   const [autoImport, setAutoImport] = useState(false);
@@ -202,7 +202,7 @@ export default function SmsImport({ onClose }: { onClose: () => void }) {
             !internal &&
             sms.type === "expense" && (
               <select
-                value={categories[key] ?? "Autre"}
+                value={categories[key] ?? suggestedCategory(sms) ?? "Autre"}
                 onChange={(e) =>
                   setCategories((prev) => ({ ...prev, [key]: e.target.value as TransactionCategory }))
                 }
