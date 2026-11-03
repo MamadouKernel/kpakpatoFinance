@@ -86,9 +86,11 @@ export default function PrivacyPage() {
 
       <h2 className={h2}>5. Conservation et suppression</h2>
       <p className={p}>
-        Vos données sont conservées tant que votre compte existe. Pour supprimer votre compte et toutes vos données, écrivez-nous
-        (voir ci-dessous) depuis l&apos;adresse e-mail de votre compte : la suppression est faite dans un délai raisonnable.
-        Vous pouvez aussi retirer vous-même vos opérations et portefeuilles depuis l&apos;application.
+        Vos données sont conservées tant que votre compte existe. Vous pouvez supprimer votre compte et toutes vos données à tout
+        moment, directement dans l&apos;application : ouvrez votre profil (icône de personne en haut), puis « Supprimer mon
+        compte ». Vos portefeuilles, opérations, tontines, profil et compte de connexion sont alors effacés définitivement. Si
+        vous ne pouvez plus ouvrir l&apos;application, écrivez-nous (voir ci-dessous) depuis l&apos;adresse e-mail de votre
+        compte. Vous pouvez aussi retirer vous-même vos opérations et portefeuilles.
       </p>
 
       <h2 className={h2}>6. Sécurité</h2>

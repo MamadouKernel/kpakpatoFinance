@@ -443,25 +443,44 @@ export default function TransactionTracker() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Portefeuille utilisé
-                  </label>
-                  <select
-                    value={selectedWallet}
-                    onChange={(e) => setSelectedWallet(e.target.value as WalletId)}
-                    className="w-full rounded-xl bg-slate-800 border border-slate-700 px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-kpakpato-orange"
-                  >
-                    {wallets.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.shortName} ({formatFCFA(w.balance)})
-                      </option>
-                    ))}
-                  </select>
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-300">
+                  {txType === "expense" ? "Payé avec" : "Reçu sur"}
+                </p>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Moyen de paiement">
+                  {wallets.map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selectedWallet === w.id}
+                      onClick={() => setSelectedWallet(w.id)}
+                      className={`rounded-xl border px-3 py-2 text-left transition ${
+                        selectedWallet === w.id
+                          ? "border-kpakpato-orange bg-kpakpato-orange/15"
+                          : "border-slate-700 bg-slate-800"
+                      }`}
+                    >
+                      <span className="block text-xs font-bold text-white">{w.shortName}</span>
+                      <span className="block text-[10px] text-slate-400">{formatFCFA(w.balance)}</span>
+                    </button>
+                  ))}
                 </div>
+                {(() => {
+                  const chosen = wallets.find((w) => w.id === selectedWallet);
+                  const value = Number(amount);
+                  if (!chosen || !Number.isFinite(value) || value <= 0) return null;
+                  const after = chosen.balance + (txType === "expense" ? -value : value);
+                  return (
+                    <p className={`mt-2 text-[11px] font-semibold ${after < 0 ? "text-amber-400" : "text-slate-400"}`}>
+                      {chosen.shortName} : {formatFCFA(chosen.balance)} → {formatFCFA(after)}
+                      {after < 0 ? " (solde insuffisant : vérifiez le portefeuille choisi)" : ""}
+                    </p>
+                  );
+                })()}
+              </div>
 
-                <div>
+              <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Catégorie
                   </label>
@@ -479,7 +498,6 @@ export default function TransactionTracker() {
                     ))}
                   </select>
                 </div>
-              </div>
 
               <button
                 type="submit"

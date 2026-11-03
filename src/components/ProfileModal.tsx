@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { useFinance } from "@/context/FinanceContext";
 import { useHousehold } from "@/context/HouseholdContext";
 import { LockSettings } from "@/components/LockSetup";
+import { deleteMyAccount } from "@/lib/delete-account";
 import { GENDER_LABELS } from "@/lib/household-utils";
 import type { Gender } from "@/types/finance";
 
@@ -15,8 +16,8 @@ const field =
 
 /** Modification du profil : nom, genre, numéro Mobile Money et nom tel qu'il apparaît dans les SMS. */
 export default function ProfileModal({ onClose }: { onClose: () => void }) {
-  const { user } = useFinance();
-  const { profile, saveProfile } = useHousehold();
+  const { user, signOutUser } = useFinance();
+  const { profile, saveProfile, household, leaveHousehold } = useHousehold();
   const [name, setName] = useState(profile?.name || user?.displayName || "");
   const [gender, setGender] = useState<Gender>(profile?.gender ?? "femme");
   const [other, setOther] = useState(profile?.genderOther ?? "");
@@ -25,6 +26,30 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const removeAccount = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteMyAccount(Boolean(household), leaveHousehold);
+      await signOutUser();
+      onClose();
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      setDeleteError(
+        code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request"
+          ? "Confirmation Google annulée : rien n'a été supprimé."
+          : e instanceof Error
+            ? e.message
+            : "Suppression impossible."
+      );
+      setDeleting(false);
+    }
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -136,6 +161,50 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         >
           {busy ? "Enregistrement…" : "Enregistrer"}
         </button>
+
+        <div className="mt-5 border-t border-slate-800 pt-4">
+          {!showDelete ? (
+            <button onClick={() => setShowDelete(true)} className="text-xs font-semibold text-rose-400 underline">
+              Supprimer mon compte
+            </button>
+          ) : (
+            <div className="space-y-2 rounded-2xl border border-rose-500/40 bg-rose-500/5 p-3">
+              <p className="text-xs font-bold text-rose-300">Supprimer mon compte</p>
+              <p className="text-[11px] leading-snug text-slate-300">
+                Vos portefeuilles, opérations, tontines et votre profil seront effacés définitivement, ainsi que votre compte de
+                connexion. {household ? "Votre Espace Couple sera aussi dissocié. " : ""}Cette action est irréversible. Google
+                vous demandera de confirmer votre identité.
+              </p>
+              <input
+                className={field}
+                value={confirmText}
+                placeholder="Tapez SUPPRIMER pour confirmer"
+                onChange={(e) => setConfirmText(e.target.value)}
+              />
+              {deleteError && <p className="text-[11px] font-semibold text-amber-400">{deleteError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={removeAccount}
+                  disabled={deleting || confirmText.trim().toUpperCase() !== "SUPPRIMER"}
+                  className="flex-1 rounded-xl bg-rose-600 py-2 text-xs font-bold text-white disabled:opacity-40"
+                >
+                  {deleting ? "Suppression…" : "Supprimer définitivement"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDelete(false);
+                    setConfirmText("");
+                    setDeleteError(null);
+                  }}
+                  disabled={deleting}
+                  className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <a
           href="/confidentialite"
