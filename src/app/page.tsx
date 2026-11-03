@@ -17,6 +17,7 @@ import GenderOnboarding from "@/components/GenderOnboarding";
 import CoupleSpace from "@/components/CoupleSpace";
 import ProfileModal from "@/components/ProfileModal";
 import PhoneConnect from "@/components/PhoneConnect";
+import CompanionInbox from "@/components/CompanionInbox";
 import { useHousehold } from "@/context/HouseholdContext";
 import { useFinance } from "@/context/FinanceContext";
 import { isFirebaseConfigured } from "@/lib/firebase";
@@ -31,6 +32,7 @@ import {
   RotateCcw,
   UserCircle,
   Smartphone,
+  ClipboardPaste,
 } from "lucide-react";
 
 type MainTab = "dashboard" | "transactions" | "income" | "kpakpato";
@@ -134,6 +136,7 @@ export default function HomePage() {
       <OfflineBanner />
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
       {showPhone && <PhoneConnect onClose={() => setShowPhone(false)} onImport={() => setActiveTab("transactions")} />}
+      <CompanionInbox />
       <ClipboardWatcher onImport={() => setActiveTab("transactions")} />
       {/* Header Mobile PWA */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 py-3.5 backdrop-blur-md">
@@ -254,6 +257,25 @@ export default function HomePage() {
       </main>
 
       {/* Barre de Navigation Mobile (Bottom Tab Bar PWA) */}
+      {activeTab === "dashboard" && (
+        <button
+          onClick={async () => {
+            try {
+              const text = (await navigator.clipboard.readText()).trim();
+              setPendingImport(text);
+            } catch {
+              setPendingImport("");
+            }
+            setActiveTab("transactions");
+          }}
+          className="fixed bottom-20 right-4 z-30 inline-flex items-center gap-1.5 rounded-full bg-kpakpato-orange px-4 py-3 text-xs font-bold text-white shadow-lg transition hover:opacity-90 active:scale-95"
+          aria-label="Coller un SMS ou une notification"
+        >
+          <ClipboardPaste className="h-4 w-4" />
+          Coller SMS
+        </button>
+      )}
+
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-lg">
         <div className="mx-auto grid max-w-xl grid-cols-4 px-2 py-2">
           <button

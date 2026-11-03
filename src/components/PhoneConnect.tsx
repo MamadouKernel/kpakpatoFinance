@@ -2,7 +2,10 @@
 
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardPaste, Share2, Smartphone, X } from "lucide-react";
+import { ClipboardPaste, Copy, Share2, Smartphone, X } from "lucide-react";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { useFinance } from "@/context/FinanceContext";
+import { db } from "@/lib/firebase";
 import { setPendingImport } from "@/lib/import-inbox";
 
 const step = "flex items-start gap-3";
@@ -28,6 +31,10 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
   const [installed, setInstalled] = useState(false);
   const [isAndroid, setIsAndroid] = useState(true);
   const [isIOS, setIsIOS] = useState(false);
+  const { user } = useFinance();
+  const uid = user?.uid;
+  const [secret, setSecret] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
@@ -36,6 +43,35 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
     setIsIOS(/iphone|ipad|ipod/i.test(navigator.userAgent));
     setOrigin(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    if (!db || !uid) return;
+    return onSnapshot(
+      doc(db, "users", uid),
+      (snap) => {
+        const v = snap.data()?.webhookSecret;
+        setSecret(typeof v === "string" ? v : null);
+      },
+      () => undefined
+    );
+  }, [uid]);
+
+  const generateSecret = async () => {
+    if (!db || !uid) return;
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const value = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    await setDoc(doc(db, "users", uid), { webhookSecret: value }, { merge: true }).catch(() => undefined);
+  };
+
+  const copy = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      // copie refusée : l'utilisateur peut sélectionner le texte
+    }
+  };
 
   const pasteAndImport = async () => {
     setPasteError(null);
@@ -162,6 +198,69 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
             Le texte n&apos;est lu que sur votre appareil, et seulement quand vous le demandez ou l&apos;avez autorisé.
           </p>
         </section>
+
+        {/* Mode 3 : automatisation Android (MacroDroid, Tasker…) */}
+        {!isIOS && (
+          <section className="mt-3 rounded-2xl border border-slate-700/70 p-4">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+              <Smartphone className="h-4 w-4 text-kpakpato-green" />
+              Avancé · Connecter mes notifications Android
+            </h3>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Pour envoyer vos notifications et SMS automatiquement, une app d&apos;automatisation (MacroDroid, Tasker ou
+              Notification Forwarder) doit être installée sur le téléphone. Les transactions arrivent ensuite dans Kpakpato et
+              s&apos;ajoutent à votre prochaine ouverture de l&apos;app.
+            </p>
+            {secret ? (
+              <>
+                <Steps
+                  items={[
+                    "Dans l'app d'automatisation, créez une règle : déclencheur « Notification reçue » (Wave, Orange Money, MTN, Moov, Djamo) ou « SMS reçu ».",
+                    "Action : « Requête HTTP » de type POST vers l'adresse ci-dessous.",
+                    "Ajoutez l'en-tête Authorization avec la valeur ci-dessous.",
+                    'Corps JSON : {"rawText": <texte de la notification ou du SMS>, "sourceApp": <nom de l\'app>} en insérant les variables proposées par l\'app.',
+                  ]}
+                />
+                {(
+                  [
+                    ["Adresse (URL)", `${origin}/api/transactions/ingest`],
+                    ["En-tête Authorization", `Bearer ${uid}.${secret}`],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label} className="mt-2">
+                    <p className="text-[11px] font-semibold text-slate-300">{label}</p>
+                    <div className="mt-1 flex items-start gap-2">
+                      <code className="block flex-1 break-all rounded-lg bg-slate-800 p-2 text-[11px] text-kpakpato-orange">
+                        {value}
+                      </code>
+                      <button
+                        onClick={() => copy(label, value)}
+                        aria-label={`Copier ${label}`}
+                        className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:text-white"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {copied === label && <p className="mt-1 text-[11px] text-emerald-400">Copié.</p>}
+                  </div>
+                ))}
+                <p className="mt-3 text-[11px] text-amber-400">
+                  Gardez cette clé secrète : elle permet d&apos;ajouter des transactions à votre compte.
+                </p>
+                <button onClick={generateSecret} className="mt-2 text-[11px] text-slate-400 underline">
+                  Régénérer la clé (l&apos;ancienne cesse de marcher)
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={generateSecret}
+                className="mt-3 w-full rounded-xl bg-slate-800 py-2.5 text-sm font-bold text-white hover:bg-slate-700"
+              >
+                Générer mon lien de connexion
+              </button>
+            )}
+          </section>
+        )}
 
         <button
           onClick={onClose}

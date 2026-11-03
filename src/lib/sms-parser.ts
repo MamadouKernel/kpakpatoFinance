@@ -7,6 +7,7 @@ export type SmsKind =
   | "wave_payment"
   | "wave_send"
   | "wave_receive"
+  | "wave_receipt"
   | "generic_debit"
   | "generic_credit";
 
@@ -81,9 +82,26 @@ const WAVE_RECEIVE = new RegExp(
   "i"
 );
 
+// Reçu Wave multi-lignes : « Type de transaction: Paiement / Marchand: X / Montant: 750F / Frais: 0F / ID de transaction: T_… ».
+const WAVE_RECEIPT = new RegExp(
+  `type\\s+de\\s+transaction\\s*:\\s*([^:]+?)\\s+(?:marchand|merchant|b[eé]n[eé]ficiaire|destinataire|exp[eé]diteur|de|[aà])\\s*:\\s*(.+?)\\s+montant\\s*:?\\s*${NUM}${CUR}`,
+  "i"
+);
+const WAVE_RECEIPT_INCOME = /d[eé]p[oô]t|re[cç]u|r[eé]ception|encaiss/i;
+
 // Notifications génériques : « Votre compte a été débité de 5 000 FCFA », « crédité de … ».
 const GENERIC_DEBIT = new RegExp(`(?:d[eé]bit[eé]|pr[eé]lev[eé]|d[eé]bit)\\s+(?:de\\s+)?${NUM}${CUR}`, "i");
 const GENERIC_CREDIT = new RegExp(`(?:cr[eé]dit[eé]|re[cç]u|approvisionn[eé])\\s+(?:de\\s+)?${NUM}${CUR}`, "i");
+
+// Mots-clés d'un SMS générique (MTN, Moov, Djamo…) quand le format n'est pas celui d'Orange Money ou de Wave.
+const KW_DEBIT = new RegExp(
+  `(?:retrait|envoy[eé]|transfert|paiement|pay[eé]|achat)(?=[\\s:,])(?:[^.]*?\\b(?:montant|de)\\s*:?\\s*|[^.]*?\\s)${NUM}${CUR}`,
+  "i"
+);
+const KW_CREDIT = new RegExp(
+  `(?:d[eé]p[oô]t|re[cç]u|r[eé]ception)(?=[\\s:,])(?:[^.]*?\\b(?:montant|de)\\s*:?\\s*|[^.]*?\\s)${NUM}${CUR}|${NUM}${CUR}\\s+transf[eé]r[eé]\\s+de\\s+.+?\\s+vers\\s+votre\\s+compte`,
+  "i"
+);
 
 const FEE_RE = new RegExp(`frais(?:\\s+(?:OM|wave|de\\s+transaction))?\\s*:?\\s*${NUM}(?:${CUR})?`, "i");
 const BALANCE_RE = new RegExp(`(?:nouveau\\s+)?solde(?:\\s+(?:wave|om|orange\\s+money))?\\s*:?\\s*${NUM}${CUR}`, "i");
@@ -151,7 +169,13 @@ function toAmounts(...raw: string[]): number[] | null {
 }
 
 function cleanText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return (
+    text
+      .replace(/\s+/g, " ")
+      // Wave écrit parfois « Frais: OF » : la lettre O à la place du chiffre 0.
+      .replace(/(frais\s*:?\s*)[Oo](?=\s*F\b)/gi, "$10")
+      .trim()
+  );
 }
 
 /** Retire la ponctuation de fin de phrase accolée à un identifiant ("…A12345."). */
@@ -246,6 +270,26 @@ export function parseSms(text: string): ParsedSms | null {
     };
   }
 
+  m = raw.match(WAVE_RECEIPT);
+  if (m) {
+    const amount = parseAmount(m[3]);
+    if (amount === null) return null;
+    const tail = extractTail(raw);
+    const income = WAVE_RECEIPT_INCOME.test(m[1]);
+    return {
+      kind: "wave_receipt",
+      ...walletFields(raw),
+      type: income ? "income" : "expense",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      ...(income ? { sender: cleanParty(m[2]) } : { merchant: cleanParty(m[2]) }),
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
   m = raw.match(WAVE_PAYMENT);
   if (m) {
     const amount = parseAmount(m[1]);
@@ -327,6 +371,47 @@ export function parseSms(text: string): ParsedSms | null {
   m = raw.match(GENERIC_CREDIT);
   if (m) {
     const amount = parseAmount(m[1]);
+    if (amount === null || amount <= 0) return null;
+    const tail = extractTail(raw);
+    const w = guessWallet(raw, "wave");
+    return {
+      kind: "generic_credit",
+      walletId: w.walletId,
+      ...(w.guessed ? { walletGuessed: true } : {}),
+      type: "income",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
+  // Mots-clés génériques : retrait / envoyé à / transfert de / paiement → dépense ; dépôt / reçu / transféré vers votre compte → entrée.
+  m = raw.match(KW_DEBIT);
+  if (m) {
+    const amount = parseAmount(m[1]);
+    if (amount === null || amount <= 0) return null;
+    const tail = extractTail(raw);
+    const w = guessWallet(raw, "wave");
+    return {
+      kind: "generic_debit",
+      walletId: w.walletId,
+      ...(w.guessed ? { walletGuessed: true } : {}),
+      type: "expense",
+      amount,
+      fee: tail.fee,
+      balance: tail.balance,
+      txId: tail.txId,
+      date: tail.date,
+      raw,
+    };
+  }
+
+  m = raw.match(KW_CREDIT);
+  if (m) {
+    const amount = parseAmount(m[1] ?? m[2]);
     if (amount === null || amount <= 0) return null;
     const tail = extractTail(raw);
     const w = guessWallet(raw, "wave");
