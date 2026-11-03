@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
 import WeeklyReport from "@/components/WeeklyReport";
+import AndroidOnboarding from "@/components/AndroidOnboarding";
 import ContactPrompt from "@/components/ContactPrompt";
 import FixedBillsAlert from "@/components/FixedBillsAlert";
 import TontineSection from "@/components/TontineSection";
@@ -231,19 +232,7 @@ export default function HomePage() {
       {isCloudSynced && <SpaceSwitch />}
 
       {/* Contenu Principal */}
-      {listening &&
-        (listening.notifications || listening.sms ? (
-          <div className="mx-4 mt-3 rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-300">
-            🤖 Écoute Android active : synchronisation automatique Wave, Orange, MTN, Moov &amp; Djamo
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowPhone(true)}
-            className="mx-4 mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-left text-[11px] font-semibold text-amber-300"
-          >
-            Écoute Android inactive : touchez ici pour autoriser la lecture des notifications et des SMS.
-          </button>
-        ))}
+      <AndroidOnboarding />
 
       <main className="flex-1 space-y-6 px-4 pt-4">
         {activeTab === "dashboard" && space === "couple" && isCloudSynced && <CoupleSpace />}

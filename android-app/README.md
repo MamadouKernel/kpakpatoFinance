@@ -25,6 +25,21 @@ notification / SMS ──► file locale du téléphone ──► pont KpakpatoN
 2. **Android Studio** (Koala ou plus récent) → *Open* → dossier `android-app/`. Gradle se synchronise tout seul.
 3. L'adresse de la plateforme est dans `gradle.properties` (`kpakpatoAppUrl`).
 
+## Construire l'APK en une commande
+
+Depuis la racine du projet (Java 17 et le SDK Android sont cherchés dans `~/Android`, modifiables par `JAVA_HOME` / `ANDROID_HOME`) :
+
+```bash
+npm run android:debug     # construit android-app/kpakpato-debug.apk
+npm run android:install   # construit puis installe sur le téléphone branché en USB (adb)
+npm run android:release   # APK signé avec votre clé de publication
+```
+
+Pour installer sans câble : copiez `android-app/kpakpato-debug.apk` sur le téléphone (partage, e-mail, Bluetooth) et ouvrez-le.
+Avec un câble : activez *Options pour les développeurs → Débogage USB* sur le Pixel, puis `adb install -r android-app/kpakpato-debug.apk`.
+Sur Android 13 ou plus, l'accès aux notifications est grisé tant que vous n'avez pas autorisé les paramètres restreints :
+*Paramètres → Applications → Kpakpato Finance → ⋮ → Autoriser les paramètres restreints*.
+
 ## Essayer sur votre téléphone
 
 Branchez le téléphone (options développeur + débogage USB) puis *Run* dans Android Studio. Ouvrez l'app, connectez-vous,

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "android:debug": "bash android-app/build.sh debug",
+    "android:install": "bash android-app/build.sh install",
+    "android:release": "bash android-app/build.sh release"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
