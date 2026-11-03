@@ -48,6 +48,7 @@ export interface Transaction {
   note?: string;
   smsKey?: string; // empreinte du SMS importé (anti-doublon)
   tontineId?: string; // cotisation rattachée à une tontine
+  smsBalance?: number; // solde annoncé par le message importé (sert à repérer les doublons)
   subtype?: ExpenseSubtype; // pour les dépenses importées (transfert, retrait, paiement)
 }
 

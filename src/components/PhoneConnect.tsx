@@ -161,6 +161,11 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
                     )}
                   </div>
                 ))}
+                <p className="rounded-lg bg-slate-800 p-2 text-[11px] text-amber-300">
+                  Bouton « Autoriser » grisé ou sans effet ? Android 13 ou plus bloque les apps installées hors du Play Store.
+                  Ouvrez Paramètres → Applications → Kpakpato Finance → menu ⋮ → « Autoriser les paramètres restreints »,
+                  puis revenez ici et réessayez.
+                </p>
                 <p className="text-[11px] text-slate-500">
                   Sur Tecno, Infinix ou Xiaomi : excluez Kpakpato de l&apos;économiseur de batterie, sinon Android peut arrêter la capture.
                 </p>

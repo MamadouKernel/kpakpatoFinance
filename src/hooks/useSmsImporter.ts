@@ -6,6 +6,7 @@ import { useHousehold } from "@/context/HouseholdContext";
 import { INTERNAL_CATEGORY } from "@/lib/finance-utils";
 import { isPartnerParty } from "@/lib/household-utils";
 import { type ParsedSms, smsKey, smsSubtype } from "@/lib/sms-parser";
+import { type OpSignature, sameOperation, txKeyOf } from "@/lib/sms-dedupe";
 import type { TransactionCategory, WalletId } from "@/types/finance";
 
 export function describeSms(sms: ParsedSms): string {
@@ -29,6 +30,18 @@ export function describeSms(sms: ParsedSms): string {
 }
 
 export const isFromDjamo = (sms: ParsedSms) => sms.kind === "wave_deposit" && /djamo/i.test(sms.bank ?? "");
+
+/** Signature d'un message analysé, pour le comparer aux opérations déjà importées. */
+export function smsSignature(sms: ParsedSms, key: string): OpSignature {
+  return {
+    walletId: sms.walletId,
+    type: sms.type,
+    amount: sms.amount,
+    balance: sms.balance,
+    at: sms.date ? Date.parse(sms.date) : Date.now(),
+    txKey: txKeyOf(key),
+  };
+}
 
 export interface PreparedSms {
   sms: ParsedSms;
@@ -55,6 +68,22 @@ export function useSmsImporter() {
     return keys;
   }, [transactions, transfers]);
 
+  // Opérations déjà importées depuis un message : on les compare aux nouveaux messages (notification + SMS = une seule opération).
+  const importedSignatures = useMemo<OpSignature[]>(
+    () =>
+      transactions
+        .filter((t) => t.smsKey)
+        .map((t) => ({
+          walletId: t.walletId,
+          type: t.type,
+          amount: t.amount,
+          balance: typeof t.smsBalance === "number" ? t.smsBalance : null,
+          at: Date.parse(t.date),
+          txKey: txKeyOf(t.smsKey),
+        })),
+    [transactions]
+  );
+
   const walletName = (id: WalletId) => wallets.find((w) => w.id === id)?.shortName ?? id;
 
   const isWithPartner = (sms: ParsedSms) => {
@@ -69,14 +98,24 @@ export function useSmsImporter() {
       return {
         sms: { ...sms, walletId: walletOverrides[key] ?? sms.walletId },
         key,
-        duplicate: knownKeys.has(key),
+        duplicate:
+          knownKeys.has(key) ||
+          importedSignatures.some((sig) => sameOperation(sig, smsSignature({ ...sms, walletId: walletOverrides[key] ?? sms.walletId }, key))),
         internal: isWithPartner(sms),
       };
     });
 
   /** Éléments à importer : ni déjà importés, ni en double dans le lot. */
-  const importable = (items: PreparedSms[]) =>
-    items.filter((i, idx) => !i.duplicate && items.findIndex((o) => o.key === i.key) === idx);
+  const importable = (items: PreparedSms[]) => {
+    const kept: PreparedSms[] = [];
+    for (const i of items) {
+      if (i.duplicate) continue;
+      const sig = smsSignature(i.sms, i.key);
+      if (kept.some((k) => k.key === i.key || sameOperation(smsSignature(k.sms, k.key), sig))) continue;
+      kept.push(i);
+    }
+    return kept;
+  };
 
   const importItems = async (
     items: PreparedSms[],
@@ -100,6 +139,7 @@ export function useSmsImporter() {
           smsKey: key,
           // Firestore refuse les valeurs undefined : on n'ajoute le champ que pour une dépense.
           ...(smsSubtype(sms) ? { subtype: smsSubtype(sms) } : {}),
+          ...(sms.balance !== null ? { smsBalance: sms.balance } : {}),
         });
       }
       if (sms.fee > 0) {

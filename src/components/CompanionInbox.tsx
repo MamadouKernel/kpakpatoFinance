@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
 import { collection, deleteDoc, doc, onSnapshot } from "firebase/firestore";
 import { useFinance } from "@/context/FinanceContext";
-import { useSmsImporter } from "@/hooks/useSmsImporter";
+import { smsSignature, useSmsImporter } from "@/hooks/useSmsImporter";
+import { type OpSignature, sameOperation } from "@/lib/sms-dedupe";
 import { db } from "@/lib/firebase";
 import { formatFCFA } from "@/lib/finance-utils";
 import { setPendingImport } from "@/lib/import-inbox";
@@ -32,6 +33,8 @@ export default function CompanionInbox() {
   importerRef.current = importer;
 
   const queue = useRef<InboxItem[]>([]);
+  // Opérations importées pendant cette session : l'état React n'est pas encore à jour entre deux messages d'un même lot.
+  const recent = useRef<OpSignature[]>([]);
   const draining = useRef(false);
   const uid = user?.uid ?? null;
 
@@ -51,9 +54,14 @@ export default function CompanionInbox() {
           const { parsed } = parseSmsBatch(item.text);
           if (parsed.length > 0) {
             const api = importerRef.current;
-            const fresh = api.importable(api.prepare(parsed));
+            const cutoff = Date.now() - 24 * 60 * 60_000;
+            recent.current = recent.current.filter((s) => s.at > cutoff);
+            const fresh = api
+              .importable(api.prepare(parsed))
+              .filter((i) => !recent.current.some((s) => sameOperation(s, smsSignature(i.sms, i.key))));
             const sure = fresh.filter((i) => !i.sms.walletGuessed);
             if (sure.length > 0) {
+              recent.current.push(...sure.map((i) => smsSignature(i.sms, i.key)));
               imported += (await api.importItems(sure)).count;
               const p = sure[0].sms;
               lastLabel = `${p.type === "income" ? "+" : "-"}${formatFCFA(p.amount)}`;
