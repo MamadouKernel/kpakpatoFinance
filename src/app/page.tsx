@@ -47,7 +47,7 @@ export default function HomePage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   // App Android : état des autorisations (null hors de l'app).
-  const [listening, setListening] = useState<null | { notifications: boolean; sms: boolean }>(null);
+  const [listening, setListening] = useState<null | { notifications: boolean; sms: boolean; smsSupported: boolean }>(null);
   useEffect(() => {
     if (!isNativeApp()) return;
     const refresh = () => setListening(nativeStatus());

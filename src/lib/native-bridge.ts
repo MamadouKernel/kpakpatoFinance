@@ -12,7 +12,7 @@ interface NativeBridge {
   ackMessages(idsJson: string): void;
   openNotificationSettings(): void;
   requestSmsPermission(): void;
-  /** JSON : { notifications: boolean, sms: boolean }. */
+  /** JSON : { notifications, sms, smsSupported } (smsSupported est faux dans la variante Play Store). */
   status(): string;
 }
 
@@ -66,10 +66,12 @@ export function ackNativeMessages(ids: string[]) {
   }
 }
 
-export function nativeStatus(): { notifications: boolean; sms: boolean } | null {
+export function nativeStatus(): { notifications: boolean; sms: boolean; smsSupported: boolean } | null {
   try {
     const s = JSON.parse(window.KpakpatoNative?.status() ?? "null");
-    return s ? { notifications: Boolean(s.notifications), sms: Boolean(s.sms) } : null;
+    return s
+      ? { notifications: Boolean(s.notifications), sms: Boolean(s.sms), smsSupported: s.smsSupported !== false }
+      : null;
   } catch {
     return null;
   }

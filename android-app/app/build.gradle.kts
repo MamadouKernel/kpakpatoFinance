@@ -9,14 +9,17 @@ plugins {
 // Adresse de la plateforme chargée par l'app (modifiable dans gradle.properties).
 val appUrl: String = (project.findProperty("kpakpatoAppUrl") as String?) ?: "https://kpakpato-finance.vercel.app"
 
+// Le Play Store exige de cibler une version d'Android récente : à relever (gradle.properties) une fois la plateforme installée.
+val targetSdkVersion: Int = ((project.findProperty("kpakpatoTargetSdk") as String?) ?: "34").toInt()
+
 android {
     namespace = "ci.kpakpato.companion"
-    compileSdk = 34
+    compileSdk = targetSdkVersion
 
     defaultConfig {
         applicationId = "ci.kpakpato.companion"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = targetSdkVersion
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "APP_URL", "\"$appUrl\"")
@@ -24,6 +27,20 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // Deux variantes : « direct » (téléchargée depuis le site, lit aussi les SMS) et « play »
+    // (Play Store : Google réserve la lecture des SMS aux applications de messagerie, donc notifications seulement).
+    flavorDimensions += "dist"
+    productFlavors {
+        create("direct") {
+            dimension = "dist"
+            buildConfigField("boolean", "SMS_ENABLED", "true")
+        }
+        create("play") {
+            dimension = "dist"
+            buildConfigField("boolean", "SMS_ENABLED", "false")
+        }
     }
 
     // Clé de publication : créez-la une fois (voir README) et renseignez keystore.properties.

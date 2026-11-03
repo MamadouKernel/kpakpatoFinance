@@ -38,7 +38,7 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
   const { user } = useFinance();
   const uid = user?.uid;
   const [native, setNative] = useState(false);
-  const [perm, setPerm] = useState<{ notifications: boolean; sms: boolean } | null>(null);
+  const [perm, setPerm] = useState<{ notifications: boolean; sms: boolean; smsSupported: boolean } | null>(null);
   const [apkReady, setApkReady] = useState<boolean | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -149,7 +149,9 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
                     { ok: perm?.notifications, label: "Lecture des notifications", act: () => window.KpakpatoNative?.openNotificationSettings() },
                     { ok: perm?.sms, label: "Lecture des SMS", act: () => window.KpakpatoNative?.requestSmsPermission() },
                   ] as const
-                ).map((row) => (
+                )
+                  .filter((row) => perm?.smsSupported !== false || row.label !== "Lecture des SMS")
+                  .map((row) => (
                   <div key={row.label} className="flex items-center justify-between rounded-xl bg-slate-800 p-2.5">
                     <span className={row.ok ? "text-emerald-300" : "text-slate-300"}>
                       {row.ok ? "✔" : "✘"} {row.label}

@@ -2,6 +2,7 @@ package ci.kpakpato.companion
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -82,6 +83,16 @@ class MainActivity : ComponentActivity() {
         MessageStore.onNewMessage = null
     }
 
+    /** Explication claire de l'usage des données, avant toute demande d'accès (exigée par le Play Store). */
+    private fun disclose(title: String, message: String, onAccept: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Accepter et continuer") { _, _ -> onAccept() }
+            .setNegativeButton("Refuser", null)
+            .show()
+    }
+
     private fun js(code: String) {
         if (::web.isInitialized) web.evaluateJavascript(code, null)
     }
@@ -134,13 +145,36 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun openNotificationSettings() {
-            runOnUiThread { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            runOnUiThread {
+                disclose(
+                    "Lire vos notifications",
+                    "Kpakpato Finance lit les notifications reçues sur ce téléphone pour enregistrer automatiquement vos " +
+                        "transactions Mobile Money (Wave, Orange Money, MTN, Moov, Djamo).\n\n" +
+                        "• Seules les notifications qui ressemblent à une transaction (un montant en FCFA et un mot comme " +
+                        "reçu, envoyé, paiement, retrait) sont retenues. Toutes les autres sont ignorées et ne quittent jamais " +
+                        "votre téléphone.\n" +
+                        "• Les transactions retenues sont envoyées uniquement vers votre compte Kpakpato. Elles ne sont ni " +
+                        "partagées avec des tiers, ni utilisées pour de la publicité.\n" +
+                        "• Vous pouvez retirer cet accès à tout moment dans les réglages Android.",
+                ) { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            }
         }
 
         @JavascriptInterface
         fun requestSmsPermission() {
+            if (!BuildConfig.SMS_ENABLED) return
             runOnUiThread {
-                ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.RECEIVE_SMS), 1)
+                disclose(
+                    "Lire vos SMS de transaction",
+                    "Kpakpato Finance lit les SMS reçus pour enregistrer automatiquement vos transactions Mobile Money.\n\n" +
+                        "• Seuls les SMS qui ressemblent à une transaction (un montant en FCFA et un mot comme reçu, envoyé, " +
+                        "paiement, retrait) sont retenus. Les autres sont ignorés et ne quittent jamais votre téléphone.\n" +
+                        "• Les transactions retenues sont envoyées uniquement vers votre compte Kpakpato, sans partage avec des " +
+                        "tiers ni publicité.\n" +
+                        "• Vous pouvez retirer cette autorisation à tout moment dans les réglages Android.",
+                ) {
+                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.RECEIVE_SMS), 1)
+                }
             }
         }
 
@@ -148,9 +182,11 @@ class MainActivity : ComponentActivity() {
         fun status(): String {
             val listener = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
                 ?.contains(ComponentName(this@MainActivity, NotificationCaptureService::class.java).flattenToString()) == true
-            val sms = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECEIVE_SMS) ==
+            val sms = BuildConfig.SMS_ENABLED &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECEIVE_SMS) ==
                 PackageManager.PERMISSION_GRANTED
-            return JSONObject().put("notifications", listener).put("sms", sms).toString()
+            return JSONObject().put("notifications", listener).put("sms", sms)
+                .put("smsSupported", BuildConfig.SMS_ENABLED).toString()
         }
     }
 }

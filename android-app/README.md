@@ -50,7 +50,7 @@ puis dans l'en-tête appuyez sur l'icône de téléphone et autorisez les **noti
 3. Récupérez l'empreinte SHA-1 de cette clé (`keytool -J-Duser.language=en -list -v -keystore kpakpato-release.jks`)
    et ajoutez-la dans Firebase (Paramètres du projet → application Android → *Ajouter une empreinte*).
    Sans cela, la connexion Google échoue pour les utilisateurs.
-4. *Build → Generate Signed Bundle / APK → APK → release*, ou en ligne de commande `./gradlew assembleRelease`.
+4. *Build → Generate Signed Bundle / APK → APK → release*, ou en ligne de commande `./gradlew assembleDirectRelease` (APK téléchargé depuis le site, avec les SMS).
 5. Copiez l'APK sous le nom **`public/kpakpato.apk`** du projet web, commitez et poussez : la fenêtre
    « Importer depuis mon téléphone » proposera alors le téléchargement.
 
@@ -63,3 +63,16 @@ puis dans l'en-tête appuyez sur l'icône de téléphone et autorisez les **noti
 - **Google Play** : Google restreint la permission SMS ; l'installation par APK n'est pas concernée.
 - **Mises à jour de la plateforme** : l'app charge le site, donc elle est toujours à jour sans réinstaller.
   Réinstallez l'APK seulement quand ce dossier `android-app/` change.
+
+
+## Deux variantes
+
+- **direct** : APK servi par le site (`public/kpakpato.apk`). Lit les notifications **et** les SMS.
+  `./gradlew assembleDirectRelease` → `app/build/outputs/apk/direct/release/`.
+- **play** : pour le Play Store. Google réserve la lecture des SMS aux applications de messagerie : cette variante n'a
+  ni la permission ni le récepteur de SMS. `./gradlew bundlePlayRelease` → `app/build/outputs/bundle/playRelease/*.aab`
+  (le Play Store demande un `.aab`).
+
+Avant de publier sur le Play Store : relever `kpakpatoTargetSdk` dans `gradle.properties` à la version exigée par Google
+(installer la plateforme Android correspondante), fournir une politique de confidentialité et remplir le formulaire
+« Sécurité des données ».
