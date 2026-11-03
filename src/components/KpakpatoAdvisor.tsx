@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { useSalary } from "@/context/SalaryContext";
 import { netFromGross } from "@/lib/payroll";
+import { shareAdviceImage, type CoachTone } from "@/lib/share-image";
 import { MEAL_BASKETS, analyzeMeals, mealContext } from "@/lib/meal-analysis";
 import {
   ABIDJAN_COMMUNES_RENT,
@@ -51,6 +52,25 @@ export default function KpakpatoAdvisor() {
   ]);
   const [inputPrompt, setInputPrompt] = useState("");
   const [loadingAI, setLoadingAI] = useState(false);
+  const [tone, setToneState] = useState<CoachTone>("pro");
+  const [shareNote, setShareNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("kpakpato_tone_v1") === "nouchi") setToneState("nouchi");
+    } catch {
+      // stockage indisponible
+    }
+  }, []);
+
+  const setTone = (next: CoachTone) => {
+    setToneState(next);
+    try {
+      localStorage.setItem("kpakpato_tone_v1", next);
+    } catch {
+      // ignoré
+    }
+  };
 
   // Salary & Rent Simulator state
   const [salaryInput, setSalaryInput] = useState<number>(350000);
@@ -85,6 +105,7 @@ export default function KpakpatoAdvisor() {
           wallets,
           transactions,
           meals: mealContext(meals),
+          tone,
           // Salaire variable : les charges fixes se basent sur le net fixe ; la prime d'heures sup se partage 70 % / 30 %.
           variablePay:
             meals.overtimeNetGain > 0
@@ -197,6 +218,27 @@ export default function KpakpatoAdvisor() {
       {/* ONGLET 1 : CHAT & DIAGNOSTIC GEMINI */}
       {subTab === "chat" && (
         <div className="space-y-3">
+          {/* Ton du coach */}
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-900 p-1" role="radiogroup" aria-label="Ton du coach">
+            {(
+              [
+                ["pro", "Conseiller Pro"],
+                ["nouchi", "Grand Frère d'Abidjan"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                role="radio"
+                aria-checked={tone === id}
+                onClick={() => setTone(id)}
+                className={`rounded-xl py-2 text-[11px] font-bold transition ${tone === id ? "bg-kpakpato-orange text-white shadow" : "text-slate-400"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {shareNote && <p className="text-center text-[11px] text-emerald-300">{shareNote}</p>}
+
           {/* Suggestions rapides */}
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {QUICK_PROMPTS.map((q) => (
@@ -228,6 +270,18 @@ export default function KpakpatoAdvisor() {
                   }`}
                 >
                   {m.content}
+                  {m.role === "kpakpato" && m.id !== "welcome-1" && (
+                    <button
+                      onClick={async () => {
+                        const res = await shareAdviceImage(m.content);
+                        setShareNote(res === "shared" ? null : res === "downloaded" ? "Image enregistrée : partagez-la depuis votre galerie." : "Impossible de créer l'image.");
+                        if (res === "downloaded") setTimeout(() => setShareNote(null), 4000);
+                      }}
+                      className="mt-2 block rounded-lg bg-slate-900/70 px-2.5 py-1 text-[10px] font-bold text-slate-300 ring-1 ring-slate-600"
+                    >
+                      📤 Partager en image
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

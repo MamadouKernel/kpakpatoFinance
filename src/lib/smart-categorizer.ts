@@ -4,8 +4,8 @@ import type { TransactionCategory } from "@/types/finance";
 /** Services et commerces de Côte d'Ivoire reconnus par mots-clés. L'ordre compte : la première règle qui correspond gagne. */
 const KEYWORD_RULES: { category: TransactionCategory; pattern: RegExp }[] = [
   // « Yango Deli » est de la livraison de repas : avant la règle Yango (transport).
-  { category: "Nourriture & Garba", pattern: /yango\s*deli|\bglovo\b|kiosque|boulangerie|prosuma|carrefour|cap\s*sud|supermarch|maquis|garba|alloco/i },
-  { category: "Transport (Yango/Gbaka/Wôrô)", pattern: /\byango\b|\bheetch\b|\buber\b|sotra|p[eé]age|gbaka|w[oô]r[oô]/i },
+  { category: "Nourriture & Garba", pattern: /yango\s*deli|\bglovo\b|kiosque|boulangerie|prosuma|carrefour|cap\s*sud|supermarch|maquis|garba|alloco|att?i[eé]k[eé]|poisson|poulet|brais[eé]|viande|riz\b|pain\b|march[eé]\b/i },
+  { category: "Transport (Yango/Gbaka/Wôrô)", pattern: /\byango\b|\bheetch\b|\buber\b|sotra|p[eé]age|gbaka|w[oô]r[oô]|taxi|moto\s*taxi|bus\b/i },
   {
     category: "Loyer & Factures (CIE/SODECI)",
     pattern: /\bcie\b|pr[eé]pay[eé]e?\s*cie|sodeci|canal\s*\+|canal\s*plus|canalbox|fibre\s*orange|orange\s*fibre|mtn\s*home|moov\s*fibre|loyer/i,

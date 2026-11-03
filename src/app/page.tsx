@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import WalletGrid from "@/components/WalletGrid";
 import TransactionTracker from "@/components/TransactionTracker";
 import WeeklyReport from "@/components/WeeklyReport";
+import IvorianLifestyleHub from "@/components/IvorianLifestyleHub";
 import AndroidOnboarding from "@/components/AndroidOnboarding";
 import ContactPrompt from "@/components/ContactPrompt";
 import FixedBillsAlert from "@/components/FixedBillsAlert";
@@ -38,9 +39,10 @@ import {
   UserCircle,
   Smartphone,
   ClipboardPaste,
+  Home,
 } from "lucide-react";
 
-type MainTab = "dashboard" | "transactions" | "income" | "kpakpato";
+type MainTab = "dashboard" | "transactions" | "income" | "life" | "kpakpato";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
@@ -276,6 +278,8 @@ export default function HomePage() {
           </>
         )}
 
+        {activeTab === "life" && <IvorianLifestyleHub />}
+
         {activeTab === "kpakpato" && <KpakpatoAdvisor />}
       </main>
 
@@ -300,10 +304,10 @@ export default function HomePage() {
       )}
 
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-lg">
-        <div className="mx-auto grid max-w-xl grid-cols-4 px-2 py-2">
+        <div className="mx-auto grid max-w-xl grid-cols-5 px-1 py-2">
           <button
             onClick={() => setActiveTab("dashboard")}
-            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-xs font-bold transition ${
+            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[10px] font-bold transition ${
               activeTab === "dashboard"
                 ? "text-kpakpato-orange"
                 : "text-slate-400 hover:text-slate-200"
@@ -315,7 +319,7 @@ export default function HomePage() {
 
           <button
             onClick={() => setActiveTab("transactions")}
-            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-xs font-bold transition ${
+            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[10px] font-bold transition ${
               activeTab === "transactions"
                 ? "text-kpakpato-orange"
                 : "text-slate-400 hover:text-slate-200"
@@ -327,7 +331,7 @@ export default function HomePage() {
 
           <button
             onClick={() => setActiveTab("income")}
-            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-xs font-bold transition ${
+            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[10px] font-bold transition ${
               activeTab === "income"
                 ? "text-kpakpato-orange"
                 : "text-slate-400 hover:text-slate-200"
@@ -338,8 +342,20 @@ export default function HomePage() {
           </button>
 
           <button
+            onClick={() => setActiveTab("life")}
+            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[10px] font-bold transition ${
+              activeTab === "life"
+                ? "text-kpakpato-orange"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Home className="w-5 h-5" />
+            <span>Quotidien</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("kpakpato")}
-            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-xs font-bold transition ${
+            className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[10px] font-bold transition ${
               activeTab === "kpakpato"
                 ? "text-kpakpato-green"
                 : "text-slate-400 hover:text-slate-200"

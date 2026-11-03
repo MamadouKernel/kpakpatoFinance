@@ -47,7 +47,7 @@ export function smsSignature(sms: ParsedSms, key: string): OpSignature {
 
 /** Destinataire ou marchand d'une dépense : sert à reconnaître un numéro déjà vu. */
 export const partyOfSms = (sms: ParsedSms): string | undefined =>
-  sms.type === "expense" ? sms.recipient ?? sms.merchant : undefined;
+  sms.type === "expense" ? sms.recipient ?? sms.merchant : sms.sender;
 
 export interface PreparedSms {
   sms: ParsedSms;

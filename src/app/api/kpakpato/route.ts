@@ -12,6 +12,12 @@ Tes règles d'or :
 5. Réponds de manière structurée, concise et actionnable (avec des puces claires).
 6. Salaire variable (heures supplémentaires) : base toujours les charges fixes (loyer, factures, tontines) sur le salaire NET FIXE, jamais sur les heures supplémentaires. Conseille de mettre 70 % de la prime nette d'heures supplémentaires dans les coffres d'épargne et de garder 30 % pour le plaisir et les paniers repas.`;
 
+const TONE_RULES = {
+  pro: "Ton : conseiller professionnel, clair et courtois, sans argot.",
+  nouchi:
+    "Ton : grand frère d'Abidjan bienveillant. Parle en français ivoirien familier avec quelques expressions nouchi courantes et inoffensives (« mon gars », « on est ensemble », « c'est chaud », « gbê »), humour chaleureux, jamais vulgaire ni moqueur. Les conseils restent précis et chiffrés. Phrases courtes, 1 ou 2 emojis au plus : le message doit pouvoir être partagé tel quel sur WhatsApp.",
+} as const;
+
 interface VariablePayContext {
   fixedNet: number;
   overtimeNetGain: number;
@@ -108,19 +114,23 @@ export async function POST(req: NextRequest) {
       transactions = [],
       meals,
       variablePay,
+      tone,
     }: {
       message: string;
       wallets: WalletInfo[];
       transactions: Transaction[];
       meals?: MealsContext;
       variablePay?: VariablePayContext;
+      tone?: "pro" | "nouchi";
     } = body;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey || apiKey === "your_gemini_api_key") {
       return NextResponse.json({
-        reply: buildSmartFallbackReply(message, wallets, transactions, meals),
+        reply:
+          (tone === "nouchi" ? "Mon gars, on est ensemble, regarde ça bien 👇\n\n" : "") +
+          buildSmartFallbackReply(message, wallets, transactions, meals),
         mode: "local-smart-advisor",
       });
     }
@@ -158,7 +168,7 @@ Question de l'utilisateur : ${message}
           "x-goog-api-key": apiKey,
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n7. ${TONE_RULES[tone === "nouchi" ? "nouchi" : "pro"]}` }] },
           contents: [{ role: "user", parts: [{ text: financialContext }] }],
         }),
       }
