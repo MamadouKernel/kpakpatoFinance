@@ -3,13 +3,17 @@
 import React, { useState } from "react";
 import CIEPredictor from "@/components/lifestyle/CIEPredictor";
 import DebtTracker from "@/components/lifestyle/DebtTracker";
+import TransportTracker from "@/components/lifestyle/TransportTracker";
+import ZeroFee from "@/components/lifestyle/ZeroFee";
 import QuickExpense from "@/components/lifestyle/QuickExpense";
 import { EventsPlanner, TontineTreasurer } from "@/components/lifestyle/TontineAndEvents";
 
-type Section = "express" | "cie" | "debts" | "tontine" | "events";
+type Section = "express" | "zerofee" | "cie" | "debts" | "tontine" | "events" | "transport";
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "express", label: "🎙️ Dépense express" },
+  { id: "zerofee", label: "💸 Zéro frais" },
+  { id: "transport", label: "🚕 Transport" },
   { id: "cie", label: "⚡ CIE" },
   { id: "debts", label: "🤝 Dettes" },
   { id: "tontine", label: "👥 Tontine" },
@@ -37,6 +41,8 @@ export default function IvorianLifestyleHub() {
         ))}
       </div>
       {section === "express" && <QuickExpense />}
+      {section === "zerofee" && <ZeroFee />}
+      {section === "transport" && <TransportTracker />}
       {section === "cie" && <CIEPredictor />}
       {section === "debts" && <DebtTracker />}
       {section === "tontine" && <TontineTreasurer />}

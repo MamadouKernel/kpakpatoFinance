@@ -1,5 +1,3 @@
-export type CoachTone = "pro" | "nouchi";
-
 const wrap = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
   const lines: string[] = [];
   for (const paragraph of text.split("\n")) {

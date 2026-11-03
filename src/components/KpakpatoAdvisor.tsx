@@ -4,7 +4,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
 import { useSalary } from "@/context/SalaryContext";
 import { netFromGross } from "@/lib/payroll";
-import { shareAdviceImage, type CoachTone } from "@/lib/share-image";
+import { shareAdviceImage } from "@/lib/share-image";
+import { type CoachTone, localKpakpatoEngine } from "@/lib/coach-engine";
+import { buildSnapshot } from "@/lib/coach-snapshot";
+import { useLifestyle } from "@/context/LifestyleContext";
 import { MEAL_BASKETS, analyzeMeals, mealContext } from "@/lib/meal-analysis";
 import {
   ABIDJAN_COMMUNES_RENT,
@@ -37,6 +40,7 @@ const QUICK_PROMPTS = [
 export default function KpakpatoAdvisor() {
   const { wallets, transactions } = useFinance();
   const { profile: salaryProfile } = useSalary();
+  const { data: lifestyle } = useLifestyle();
   const [subTab, setSubTab] = useState<AdvisorSubTab>("chat");
   const meals = useMemo(() => analyzeMeals(transactions, salaryProfile), [transactions, salaryProfile]);
 
@@ -96,43 +100,27 @@ export default function KpakpatoAdvisor() {
     if (!textToSend) setInputPrompt("");
     setLoadingAI(true);
 
+    // Résumé chiffré de la situation : envoyé à l'IA, et utilisé par le moteur local si le réseau ou l'IA font défaut.
+    const snapshot = buildSnapshot(wallets, transactions, salaryProfile, lifestyle);
+    let reply: string | null = null;
     try {
       const res = await fetch("/api/kpakpato", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: query,
-          wallets,
-          transactions,
-          meals: mealContext(meals),
-          tone,
-          // Salaire variable : les charges fixes se basent sur le net fixe ; la prime d'heures sup se partage 70 % / 30 %.
-          variablePay:
-            meals.overtimeNetGain > 0
-              ? {
-                  fixedNet: netFromGross(salaryProfile.baseGross + salaryProfile.taxableBonuses, salaryProfile.parts).net,
-                  overtimeNetGain: Math.round(meals.overtimeNetGain),
-                }
-              : undefined,
-        }),
+        body: JSON.stringify({ message: query, snapshot, tone }),
       });
       const data = await res.json();
-      const botMsg: ChatMessage = {
-        id: `k-${Date.now()}`,
-        role: "kpakpato",
-        content:
-          data.reply ||
-          "Mon gars, petit souci de connexion. Réessaie dans quelques secondes !",
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, botMsg]);
+      if (typeof data.reply === "string" && data.reply.trim()) reply = data.reply;
     } catch {
+      // hors ligne ou serveur injoignable : le moteur local répond ci-dessous
+    }
+    try {
       setMessages((prev) => [
         ...prev,
         {
-          id: `err-${Date.now()}`,
+          id: `k-${Date.now()}`,
           role: "kpakpato",
-          content: "Erreur réseau temporaire lors de l'appel à Kpakpato IA.",
+          content: reply ?? localKpakpatoEngine(query, snapshot, tone),
           timestamp: new Date().toISOString(),
         },
       ]);

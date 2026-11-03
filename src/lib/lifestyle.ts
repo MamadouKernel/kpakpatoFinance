@@ -247,10 +247,11 @@ export function tontineSummary(t: Tontine, month: string, transactions: Transact
 
 /* ------------------------------------------------------------------ Événements */
 
-/** Dates indicatives des fêtes mobiles (calendrier lunaire) : à corriger selon l'annonce officielle. */
+/** Dates indicatives des fêtes mobiles (calendrier lunaire pour Korité et Tabaski) : à corriger selon l'annonce officielle. */
 const ISLAMIC: Record<string, Record<number, string>> = {
   Korité: { 2026: "2026-03-20", 2027: "2027-03-10", 2028: "2028-02-27", 2029: "2029-02-15" },
   Tabaski: { 2026: "2026-05-27", 2027: "2027-05-17", 2028: "2028-05-06", 2029: "2029-04-26" },
+  Pâques: { 2026: "2026-04-05", 2027: "2027-03-28", 2028: "2028-04-16", 2029: "2029-04-01" },
 };
 
 export function eventPresets(now = new Date()): { name: string; date: string }[] {
@@ -268,6 +269,7 @@ export function eventPresets(now = new Date()): { name: string; date: string }[]
     { name: "Rentrée scolaire", date: fixed(9, 7) },
     { name: "Tabaski", date: next("Tabaski") },
     { name: "Korité", date: next("Korité") },
+    { name: "Pâques", date: next("Pâques") },
     { name: "Noël", date: fixed(12, 25) },
   ];
 }

@@ -1,207 +1,125 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Transaction, WalletInfo } from "@/types/finance";
-import { formatFCFA, isInternalTransfer } from "@/lib/finance-utils";
+import { type CoachTone, localKpakpatoEngine } from "@/lib/coach-engine";
+import { EMPTY_SNAPSHOT, type FinanceSnapshot } from "@/lib/coach-snapshot";
+
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 const SYSTEM_PROMPT = `Tu es "Kpakpato", le conseiller financier personnel intelligent des jeunes travailleurs, freelances et étudiants à Abidjan (Côte d'Ivoire).
-Ton ton est chaleureux, direct, bienveillant, légèrement teinté d'expressions ivoiriennes respectueuses ("Mon/Ma champion(ne)", "On se dit les gbê", "Faut pas que le mois finisse avant ton salaire", "Attention aux petits Yango et garba cumulés", "Coffre Djamo", "Tontine").
 Tes règles d'or :
-1. Toutes les sommes sont exprimées en FCFA.
-2. Analyse concrètement la répartition entre les portefeuilles (Wave, Orange Money, MTN MoMo, Moov Money, Djamo, Cash) : conseille de ne pas laisser toute son épargne sur le compte Wave courant (tentation de dépense rapide) et d'isoler au moins 15-20% dans un Coffre Djamo ou compte épargne.
-3. Rappelle la règle du loyer à Abidjan : le loyer + transport domicile-travail ne doivent pas étouffer le salaire net (idéalement loyer <= 25-30% du net). Compare intelligemment les communes (Yopougon, Abobo/Dokui, Koumassi, Cocody Angré/Palmeraie, Marcory, Bingerville).
-4. Éduque sur le passage Salaire Brut -> Salaire Net en Côte d'Ivoire (CNPS 6.3%, CMU 1 000 FCFA, ITS) et la gestion de la CIE prépayée, SODECI, tontines et urgences familiales ("la taxe familiale").
-5. Réponds de manière structurée, concise et actionnable (avec des puces claires).
-6. Salaire variable (heures supplémentaires) : base toujours les charges fixes (loyer, factures, tontines) sur le salaire NET FIXE, jamais sur les heures supplémentaires. Conseille de mettre 70 % de la prime nette d'heures supplémentaires dans les coffres d'épargne et de garder 30 % pour le plaisir et les paniers repas.`;
+1. Toutes les sommes sont exprimées en FCFA. Appuie-toi UNIQUEMENT sur les chiffres du contexte fourni : n'invente aucun montant.
+2. Analyse la répartition entre les portefeuilles (Wave, Orange Money, MTN MoMo, Moov Money, Djamo, Cash) : conseille de ne pas laisser toute l'épargne sur Wave et d'isoler 15 à 20 % dans le coffre Djamo.
+3. Loyer à Abidjan : loyer + transport ne doivent pas étouffer le salaire net (loyer ≤ 30 % du net FIXE).
+4. Éduque sur le passage Salaire Brut -> Net en Côte d'Ivoire (CNPS 6,3 %, CMU 1 000 FCFA, ITS), la CIE prépayée, la SODECI, les tontines et la « taxe familiale ».
+5. Réponds de façon structurée, concise (moins de 180 mots) et actionnable, avec des puces claires.
+6. Salaire variable : base les charges fixes sur le salaire NET FIXE, jamais sur les heures supplémentaires. Mets 70 % de la prime nette d'heures sup en épargne et garde 30 % pour le plaisir et les paniers repas.`;
 
-const TONE_RULES = {
+const TONE_RULES: Record<CoachTone, string> = {
   pro: "Ton : conseiller professionnel, clair et courtois, sans argot.",
   nouchi:
-    "Ton : grand frère d'Abidjan bienveillant. Parle en français ivoirien familier avec quelques expressions nouchi courantes et inoffensives (« mon gars », « on est ensemble », « c'est chaud », « gbê »), humour chaleureux, jamais vulgaire ni moqueur. Les conseils restent précis et chiffrés. Phrases courtes, 1 ou 2 emojis au plus : le message doit pouvoir être partagé tel quel sur WhatsApp.",
-} as const;
+    "Ton : grand frère d'Abidjan bienveillant. Français ivoirien familier avec quelques expressions nouchi courantes et inoffensives (« mon gars », « on est ensemble », « c'est chaud », « gbê »), humour chaleureux, jamais vulgaire ni moqueur. Conseils précis et chiffrés, phrases courtes, 1 ou 2 emojis au plus : le message doit pouvoir être partagé tel quel sur WhatsApp.",
+};
 
-interface VariablePayContext {
-  fixedNet: number;
-  overtimeNetGain: number;
+/**
+ * Modèles essayés dans l'ordre. Les anciens (gemini-2.0-flash, gemini-2.5-flash) répondent « plus disponible » (404),
+ * et les plus récents sont souvent saturés (503) : on commence par le plus rapide et on descend la liste.
+ * GEMINI_MODEL, s'il est défini, passe en premier.
+ */
+const MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"];
+const RACE_TIMEOUT_MS = 9000;
+const LAST_TIMEOUT_MS = 5000;
+
+const fcfa = (n: number) => `${new Intl.NumberFormat("fr-FR").format(Math.round(n))} FCFA`;
+
+function contextText(s: FinanceSnapshot): string {
+  const lines = [
+    `Portefeuilles : ${s.wallets.map((w) => `${w.name} ${fcfa(w.balance)}`).join(", ") || "aucun"} (total ${fcfa(s.total)})`,
+    `Ce mois : entrées ${fcfa(s.month.income)}, dépenses ${fcfa(s.month.expense)}`,
+    s.month.byCategory.length ? `Dépenses par catégorie : ${s.month.byCategory.map((c) => `${c.category} ${fcfa(c.amount)}`).join(" ; ")}` : "",
+    `Frais Mobile Money payés ce mois : ${fcfa(s.month.fees)}`,
+    `Transport ce mois : ${fcfa(s.month.transport)} (dont Yango/VTC ${fcfa(s.month.transportYango)})`,
+    `Restauration ce mois : ${fcfa(s.month.food)} (dont fast-food et livraisons ${fcfa(s.month.fastFood)})`,
+    `Dépenses en espèces ce mois : ${fcfa(s.cashSpent)}`,
+    s.salary
+      ? `Salaire net fixe ${fcfa(s.salary.fixedNet)} ; loyer maximum conseillé (30 %) ${fcfa(s.salary.rentCap)} ; prime nette d'heures sup ${fcfa(s.salary.overtimeNetGain)} (${s.salary.overtimeHours} h)`
+      : "Salaire non renseigné.",
+    `Dettes : on me doit ${fcfa(s.debts.owedToMe)} ; je dois ${fcfa(s.debts.iOwe)}`,
+    s.cie && s.cie.daysLeft !== null ? `Compteur CIE : environ ${s.cie.daysLeft} jour(s) restants (${fcfa(s.cie.ratePerDay ?? 0)} par jour)` : "",
+    s.tontine.pendingMembers > 0 ? `Tontine : ${s.tontine.pendingMembers} cotisation(s) en attente (${s.tontine.groups.join(", ")})` : "",
+  ];
+  return lines.filter(Boolean).join("\n");
 }
 
-function variablePayLine(v?: VariablePayContext): string {
-  if (!v || v.overtimeNetGain <= 0) return "";
-  return `Salaire variable : net fixe ${formatFCFA(v.fixedNet)} (base des charges fixes). Prime nette d'heures sup ce mois : ${formatFCFA(v.overtimeNetGain)} → ${formatFCFA(Math.round(v.overtimeNetGain * 0.7))} à épargner (70 %), ${formatFCFA(Math.round(v.overtimeNetGain * 0.3))} pour le plaisir et les paniers repas (30 %).`;
-}
-
-interface MealsContext {
-  overtimeHours: number;
-  overtimeNetGain: number;
-  foodTotal: number;
-  fastFoodTotal: number;
-  deliveryTotal: number;
-  fastFoodCount: number;
-  primeSharePercent: number | null;
-  level: string;
-}
-
-function mealsLine(m?: MealsContext): string {
-  if (!m || m.foodTotal <= 0) return "";
-  const prime =
-    m.overtimeHours > 0
-      ? ` Prime nette d'heures sup : ${formatFCFA(m.overtimeNetGain)} (${m.overtimeHours} h)${
-          m.primeSharePercent !== null ? `, dont ${m.primeSharePercent} % dépensés en fast-food/livraison` : ""
-        }.`
-      : "";
-  return `Restauration du mois : ${formatFCFA(m.foodTotal)} dont ${formatFCFA(m.fastFoodTotal)} en fast-food/livraison (${m.fastFoodCount} achats).${prime}`;
-}
-
-function buildSmartFallbackReply(
-  question: string,
-  wallets: WalletInfo[],
-  transactions: Transaction[],
-  meals?: MealsContext
-): string {
-  // Les virements entre conjoints ne sont ni des revenus ni des dépenses.
-  transactions = transactions.filter((t) => !isInternalTransfer(t));
-  const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
-  const waveWallet = wallets.find((w) => w.id === "wave")?.balance || 0;
-  const djamoWallet = wallets.find((w) => w.id === "djamo")?.balance || 0;
-
-  const totalIncome = transactions
-    .filter((t) => t.type === "income")
-    .reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions
-    .filter((t) => t.type === "expense")
-    .reduce((s, t) => s + t.amount, 0);
-
-  const transportSpend = transactions
-    .filter((t) => t.type === "expense" && t.category.includes("Transport"))
-    .reduce((s, t) => s + t.amount, 0);
-
-  const rentSpend = transactions
-    .filter((t) => t.type === "expense" && t.category.includes("Loyer"))
-    .reduce((s, t) => s + t.amount, 0);
-
-  const savingsRatio =
-    totalBalance > 0 ? Math.round((djamoWallet / totalBalance) * 100) : 0;
-
-  return `👋 **Ici Kpakpato ! On se dit les gbê sur tes finances actuelles :**
-
-- **Patrimoine total disponible :** Tu as actuellement **${formatFCFA(totalBalance)}** répartis sur tes 6 portefeuilles (dont **${formatFCFA(waveWallet)}** sur Wave et **${formatFCFA(djamoWallet)}** sur Djamo).
-- **Bilan des flux :** Tes entrées totalisent **${formatFCFA(totalIncome)}** contre **${formatFCFA(totalExpense)}** de dépenses enregistrées.
-- **Diagnostic Portefeuilles :** ${
-    waveWallet > djamoWallet
-      ? `Attention, tu as plus d'argent sur **Wave (${formatFCFA(waveWallet)})** que sur **Djamo (${formatFCFA(djamoWallet)})**. À Abidjan, l'argent qui dort sur Wave part vite en QR code ou dépannage ! Bascule au moins **${formatFCFA(Math.round(waveWallet * 0.35))}** vers un coffre bloqué.`
-      : `Bravo ! ${savingsRatio}% de ton solde est sécurisé sur Djamo (${formatFCFA(djamoWallet)}), loin des tentations de dépenses impulsives.`
+async function askGemini(apiKey: string, model: string, system: string, prompt: string, timeoutMs: number): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn(`Gemini ${model} : HTTP ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    const parts: { text?: string; thought?: boolean }[] = data?.candidates?.[0]?.content?.parts ?? [];
+    const text = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join("").trim();
+    return text || null;
+  } catch (err) {
+    console.warn(`Gemini ${model} : ${err instanceof Error ? err.name : "erreur"}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
-- **Loyer & Transport à Abidjan :** ${
-    rentSpend > 0
-      ? `Tes charges de logement/factures sont à **${formatFCFA(rentSpend)}** et ton transport à **${formatFCFA(transportSpend)}**. Veille à ce que le duo (Loyer + Yango/Wôrô-wôrô) reste sous **35% de ton revenu net**.`
-      : `Pense à enregistrer ton loyer et tes rechargements CIE prépayés dès le début du mois pour connaître ton vrai reste à vivre.`
-  }
-${
-    meals && meals.foodTotal > 0
-      ? `- **Repas & primes :** ${mealsLine(meals)} ${
-          meals.fastFoodTotal > 0
-            ? `Passe à des paniers repas faits maison (un seul passage au marché pour la semaine) : vise **${formatFCFA(Math.round(meals.fastFoodTotal * 0.5))}** de courses au lieu de ${formatFCFA(meals.fastFoodTotal)} et mets la différence dans ton coffre dès que la prime tombe.`
-            : "Continue comme ça !"
-        }\n`
-      : ""
-  }- **Conseil actionnable pour ta question (« ${question.slice(0, 60)} ») :** Applique la méthode **50 / 30 / 20 adaptée à Abidjan** : 50% charges fixes (Loyer, CIE/SODECI, Transport, Nourriture), 20% Épargne intouchable dès la paie, 15% Tontine/Famille plafonnée, et 15% Loisirs/Chill.`;
 }
 
 export async function POST(req: NextRequest) {
+  let message = "Analyse mes finances et donne-moi 3 conseils concrets.";
+  let snapshot: FinanceSnapshot = EMPTY_SNAPSHOT;
+  let tone: CoachTone = "pro";
+
   try {
     const body = await req.json();
-    const {
-      message = "Analyse mes finances et donne-moi 3 conseils concrets.",
-      wallets = [],
-      transactions = [],
-      meals,
-      variablePay,
-      tone,
-    }: {
-      message: string;
-      wallets: WalletInfo[];
-      transactions: Transaction[];
-      meals?: MealsContext;
-      variablePay?: VariablePayContext;
-      tone?: "pro" | "nouchi";
-    } = body;
-
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey || apiKey === "your_gemini_api_key") {
-      return NextResponse.json({
-        reply:
-          (tone === "nouchi" ? "Mon gars, on est ensemble, regarde ça bien 👇\n\n" : "") +
-          buildSmartFallbackReply(message, wallets, transactions, meals),
-        mode: "local-smart-advisor",
-      });
-    }
-
-    const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-
-    const financialContext = `
-Voici les données financières actuelles de l'utilisateur en FCFA :
-- Portefeuilles : ${wallets
-      .map((w) => `${w.shortName}: ${w.balance} FCFA`)
-      .join(", ")}
-- Total avoirs : ${wallets.reduce((a, b) => a + b.balance, 0)} FCFA
-- 12 dernières transactions : ${transactions
-      .filter((t) => !isInternalTransfer(t))
-      .slice(0, 12)
-      .map(
-        (t) =>
-          `[${t.type === "income" ? "+" : "-"}${t.amount} FCFA | ${t.category} | ${t.title} via ${t.walletId}]`
-      )
-      .join(" ; ")}
-
-${mealsLine(meals)}
-${variablePayLine(variablePay)}
-Si l'utilisateur fait des heures supplémentaires et dépense beaucoup en fast-food ou livraisons, alerte-le avec bienveillance et propose des paniers repas faits maison (courses groupées au marché) pour épargner sa prime.
-
-Question de l'utilisateur : ${message}
-`;
-
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n7. ${TONE_RULES[tone === "nouchi" ? "nouchi" : "pro"]}` }] },
-          contents: [{ role: "user", parts: [{ text: financialContext }] }],
-        }),
-      }
-    );
-
-    if (!geminiRes.ok) {
-      const errBody = await geminiRes.text();
-      throw new Error(`Gemini ${geminiRes.status}: ${errBody.slice(0, 300)}`);
-    }
-
-    const data = await geminiRes.json();
-    const parts: { text?: string; thought?: boolean }[] =
-      data?.candidates?.[0]?.content?.parts ?? [];
-    const text = parts
-      .filter((p) => p.text && !p.thought)
-      .map((p) => p.text)
-      .join("");
-    if (!text) throw new Error("Gemini : réponse vide");
-
-    return NextResponse.json({
-      reply: text,
-      mode: "gemini-live",
-    });
-  } catch (error) {
-    console.error("Erreur API Kpakpato:", error);
-    return NextResponse.json(
-      {
-        reply:
-          "Désolé mon champion, le conseiller IA est momentanément indisponible. Réessaie dans un instant !",
-        mode: "error-fallback",
-        detail: error instanceof Error ? error.message : String(error),
-      },
-      { status: 200 }
-    );
+    if (typeof body.message === "string" && body.message.trim()) message = body.message.trim().slice(0, 1000);
+    if (body.snapshot && typeof body.snapshot === "object") snapshot = { ...EMPTY_SNAPSHOT, ...body.snapshot };
+    if (body.tone === "nouchi") tone = "nouchi";
+  } catch {
+    // corps illisible : on répond quand même avec le moteur local
   }
+
+  // Le moteur local répond toujours : sans clé, sans réseau ou si tous les modèles sont indisponibles.
+  const local = () => NextResponse.json({ reply: localKpakpatoEngine(message, snapshot, tone), mode: "local-engine" });
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === "your_gemini_api_key") return local();
+
+  const system = `${SYSTEM_PROMPT}\n7. ${TONE_RULES[tone]}`;
+  const prompt = `Contexte financier réel de l'utilisateur (FCFA) :\n${contextText(snapshot)}\n\nQuestion : ${message}`;
+
+  const custom = process.env.GEMINI_MODEL?.trim();
+  const models = Array.from(new Set([...(custom ? [custom] : []), ...MODELS]));
+  // Les deux premiers modèles partent en même temps : la première réponse valide gagne (moins d'attente si l'un est saturé).
+  const race = models.slice(0, 2).map(async (model) => {
+    const reply = await askGemini(apiKey, model, system, prompt, RACE_TIMEOUT_MS);
+    if (!reply) throw new Error("vide");
+    return { reply, model };
+  });
+  try {
+    const winner = await Promise.any(race);
+    return NextResponse.json({ reply: winner.reply, mode: "gemini-live", model: winner.model });
+  } catch {
+    // aucun des deux n'a répondu : on tente le modèle suivant avant de passer au moteur local
+  }
+  for (const model of models.slice(2, 3)) {
+    const reply = await askGemini(apiKey, model, system, prompt, LAST_TIMEOUT_MS);
+    if (reply) return NextResponse.json({ reply, mode: "gemini-live", model });
+  }
+  return local();
 }
