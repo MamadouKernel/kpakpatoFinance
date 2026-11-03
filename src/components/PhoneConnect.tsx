@@ -114,41 +114,6 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
           Ajoutez vos transactions Wave, Orange Money, MTN et Moov en un geste, sans les ressaisir et sans rien télécharger.
         </p>
 
-        {/* iPhone : automatisation Raccourcis d'Apple */}
-        {isIOS && (
-          <section className="mt-3 rounded-2xl border border-kpakpato-green/50 bg-kpakpato-green/5 p-4">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-white">
-              <Smartphone className="h-4 w-4 text-kpakpato-green" />
-              iPhone · Automatisation avec Raccourcis
-            </h3>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Apple interdit à une app de lire vos messages, mais son app Raccourcis peut ouvrir Kpakpato à chaque SMS
-              de Wave ou Orange Money. À configurer une seule fois (iOS 17 ou plus récent conseillé).
-            </p>
-            <Steps
-              items={[
-                "Ouvrez l'app Raccourcis → onglet Automatisation → « + » → Message.",
-                "Dans « Le message contient », saisissez Wave (créez-en une autre pour Orange Money). Choisissez « Exécuter immédiatement » puis Suivant.",
-                "Choisissez « Nouveau raccourci vierge » et ajoutez l'action « URL », avec ce texte :",
-              ]}
-            />
-            <code className="mt-2 block break-all rounded-lg bg-slate-800 p-2 text-[11px] text-kpakpato-orange">
-              {origin}/?text=
-            </code>
-            <Steps
-              items={[
-                "Juste après « ?text= », touchez la zone et insérez la variable « Contenu du message » (variable magique « Message »).",
-                "Ajoutez l'action « Ouvrir les URL » et validez.",
-              ]}
-            />
-            <p className="mt-2 text-[11px] text-slate-500">
-              À chaque SMS Wave, Kpakpato s'ouvre et importe la transaction. Elle s'ouvre dans Safari : connectez-vous une
-              fois avec Google, vos données sont les mêmes que dans l&apos;app installée. Réglage non vérifié sur tous les
-              modèles : si une étape diffère chez vous, utilisez « Coller et importer ».
-            </p>
-          </section>
-        )}
-
         {/* Mode 1 : partage depuis la PWA */}
         <section className="mt-5 rounded-2xl border border-slate-700/70 p-4">
           <h3 className="flex items-center gap-2 text-sm font-bold text-white">
@@ -200,21 +165,28 @@ export default function PhoneConnect({ onClose, onImport }: { onClose: () => voi
         </section>
 
         {/* Mode 3 : automatisation Android (MacroDroid, Tasker…) */}
-        {!isIOS && (
+        {(
           <section className="mt-3 rounded-2xl border border-slate-700/70 p-4">
             <h3 className="flex items-center gap-2 text-sm font-bold text-white">
               <Smartphone className="h-4 w-4 text-kpakpato-green" />
-              Avancé · Connecter mes notifications Android
+              {isIOS ? "Automatique · SMS avec Raccourcis (iPhone)" : "Automatique · MacroDroid / Tasker (Android)"}
             </h3>
             <p className="mt-1 text-[11px] text-slate-400">
-              Pour envoyer vos notifications et SMS automatiquement, une app d&apos;automatisation (MacroDroid, Tasker ou
-              Notification Forwarder) doit être installée sur le téléphone. Les transactions arrivent ensuite dans Kpakpato et
-              s&apos;ajoutent à votre prochaine ouverture de l&apos;app.
+              {isIOS
+                ? "L'app Raccourcis, déjà installée sur votre iPhone, envoie chaque SMS Wave ou Orange Money à Kpakpato, sans rien ouvrir. À régler une seule fois."
+                : "Une app d'automatisation (MacroDroid, Tasker ou Notification Forwarder) envoie vos notifications et SMS à Kpakpato. Elle est à installer une fois sur le téléphone."}{" "}
+              Les transactions s&apos;ajoutent à votre prochaine ouverture de Kpakpato.
             </p>
             {secret ? (
               <>
                 <Steps
-                  items={[
+                  items={isIOS ? [
+                    "Ouvrez Raccourcis → onglet Automatisation → « + » → Message. Dans « Le message contient », saisissez Wave, puis « Exécuter immédiatement » (refaites-le pour Orange Money).",
+                    "Choisissez « Nouveau raccourci vierge » et ajoutez l'action « Obtenir le contenu de l'URL ».",
+                    "URL : l'adresse ci-dessous. Touchez « Afficher plus » : Méthode POST, ajoutez l'en-tête Authorization avec la valeur ci-dessous.",
+                    "Corps de la requête : JSON. Ajoutez un champ Texte nommé rawText et choisissez la variable « Contenu du message » ; ajoutez un champ sourceApp avec le mot Wave (ou Orange Money).",
+                    "Validez. À chaque SMS Wave, le texte part tout seul vers Kpakpato.",
+                  ] : [
                     "Dans l'app d'automatisation, créez une règle : déclencheur « Notification reçue » (Wave, Orange Money, MTN, Moov, Djamo) ou « SMS reçu ».",
                     "Action : « Requête HTTP » de type POST vers l'adresse ci-dessous.",
                     "Ajoutez l'en-tête Authorization avec la valeur ci-dessous.",
