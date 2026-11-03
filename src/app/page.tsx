@@ -11,6 +11,7 @@ import UpdateBanner from "@/components/UpdateBanner";
 import OfflineBanner from "@/components/OfflineBanner";
 import ClipboardWatcher from "@/components/ClipboardWatcher";
 import { setPendingImport } from "@/lib/import-inbox";
+import { isNativeApp, nativeStatus } from "@/lib/native-bridge";
 import IncomeBonus from "@/components/IncomeBonus";
 import SpaceSwitch from "@/components/SpaceSwitch";
 import GenderOnboarding from "@/components/GenderOnboarding";
@@ -45,6 +46,15 @@ export default function HomePage() {
   const [signInError, setSignInError] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+  // App Android : état des autorisations (null hors de l'app).
+  const [listening, setListening] = useState<null | { notifications: boolean; sms: boolean }>(null);
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    const refresh = () => setListening(nativeStatus());
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [showPhone]);
 
   // Texte partagé vers l'app (Android : Partager → Kpakpato) : on le dépose pour l'import.
   useEffect(() => {
@@ -218,6 +228,20 @@ export default function HomePage() {
       {isCloudSynced && <SpaceSwitch />}
 
       {/* Contenu Principal */}
+      {listening &&
+        (listening.notifications || listening.sms ? (
+          <div className="mx-4 mt-3 rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-300">
+            🤖 Écoute Android active : synchronisation automatique Wave, Orange, MTN, Moov &amp; Djamo
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowPhone(true)}
+            className="mx-4 mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-left text-[11px] font-semibold text-amber-300"
+          >
+            Écoute Android inactive : touchez ici pour autoriser la lecture des notifications et des SMS.
+          </button>
+        ))}
+
       <main className="flex-1 space-y-6 px-4 pt-4">
         {activeTab === "dashboard" && space === "couple" && isCloudSynced && <CoupleSpace />}
 
@@ -257,7 +281,7 @@ export default function HomePage() {
       </main>
 
       {/* Barre de Navigation Mobile (Bottom Tab Bar PWA) */}
-      {activeTab === "dashboard" && (
+      {activeTab === "dashboard" && !listening && (
         <button
           onClick={async () => {
             try {

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useFinance } from "@/context/FinanceContext";
+import WalletDetail from "@/components/WalletDetail";
 import { CUSTOM_WALLET_COLORS, formatFCFA, parseFcfaInput } from "@/lib/finance-utils";
 import { WalletId, WalletInfo } from "@/types/finance";
 import {
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 
 export default function WalletGrid() {
+  const [detailId, setDetailId] = useState<WalletId | null>(null);
   const {
     wallets,
     totalBalance,
@@ -322,6 +324,8 @@ export default function WalletGrid() {
         </form>
       )}
 
+      {detailId && <WalletDetail walletId={detailId} onClose={() => setDetailId(null)} />}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {wallets.map((wallet) => {
           const isEditing = editingWallet === wallet.id;
@@ -396,6 +400,14 @@ export default function WalletGrid() {
                   className="mt-2 inline-flex items-center gap-1 rounded-lg bg-black/25 px-2 py-1 text-[10px] font-bold hover:bg-black/40"
                 >
                   <Trash2 className="w-3 h-3" /> Supprimer
+                </button>
+              )}
+              {!isEditing && (
+                <button
+                  onClick={() => setDetailId(wallet.id)}
+                  className="mt-2 rounded-lg bg-black/20 px-2 py-1 text-[10px] font-bold hover:bg-black/35"
+                >
+                  Voir le détail
                 </button>
               )}
               {isEditing && editError ? (

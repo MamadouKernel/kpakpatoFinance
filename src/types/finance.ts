@@ -34,6 +34,9 @@ export interface WalletInfo {
   custom?: boolean;
 }
 
+/** Nature d'une dépense Mobile Money : envoi à un contact, retrait d'espèces ou paiement marchand. */
+export type ExpenseSubtype = "transfert" | "retrait" | "paiement";
+
 export interface Transaction {
   id: string;
   title: string;
@@ -45,6 +48,7 @@ export interface Transaction {
   note?: string;
   smsKey?: string; // empreinte du SMS importé (anti-doublon)
   tontineId?: string; // cotisation rattachée à une tontine
+  subtype?: ExpenseSubtype; // pour les dépenses importées (transfert, retrait, paiement)
 }
 
 export interface Transfer {

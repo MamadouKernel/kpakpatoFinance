@@ -19,6 +19,7 @@ import {
   sanitizeWallets,
   transactionDelta,
 } from "@/lib/finance-utils";
+import { isNativeApp, nativeGoogleToken } from "@/lib/native-bridge";
 import {
   auth,
   db,
@@ -26,7 +27,9 @@ import {
   isFirebaseConfigured,
 } from "@/lib/firebase";
 import {
+  GoogleAuthProvider,
   onAuthStateChanged,
+  signInWithCredential,
   signInWithPopup,
   signOut as fbSignOut,
   User,
@@ -305,6 +308,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       alert(
         "Mode Démo Local actif : Configurez vos clés NEXT_PUBLIC_FIREBASE_* dans .env.local pour activer la connexion Google Firebase."
       );
+      return;
+    }
+    // Dans l'app Android, Google refuse la connexion en fenêtre : Android la fait et renvoie un jeton.
+    if (isNativeApp()) {
+      const idToken = await nativeGoogleToken();
+      await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
       return;
     }
     await signInWithPopup(auth, googleProvider);

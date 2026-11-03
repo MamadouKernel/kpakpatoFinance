@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download } from "lucide-react";
+import "@/lib/native-bridge";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -56,7 +57,8 @@ export default function InstallButton({ compact = false }: { compact?: boolean }
     };
   }, []);
 
-  if (!ready || installed) return null;
+  // Déjà dans l'app Android Kpakpato : rien à installer.
+  if (!ready || installed || window.KpakpatoNative) return null;
 
   const handleClick = async () => {
     if (deferredPrompt) {

@@ -5,7 +5,7 @@ import { useFinance } from "@/context/FinanceContext";
 import { useHousehold } from "@/context/HouseholdContext";
 import { INTERNAL_CATEGORY } from "@/lib/finance-utils";
 import { isPartnerParty } from "@/lib/household-utils";
-import { type ParsedSms, smsKey } from "@/lib/sms-parser";
+import { type ParsedSms, smsKey, smsSubtype } from "@/lib/sms-parser";
 import type { TransactionCategory, WalletId } from "@/types/finance";
 
 export function describeSms(sms: ParsedSms): string {
@@ -98,6 +98,8 @@ export function useSmsImporter() {
           date: sms.date,
           note,
           smsKey: key,
+          // Firestore refuse les valeurs undefined : on n'ajoute le champ que pour une dépense.
+          ...(smsSubtype(sms) ? { subtype: smsSubtype(sms) } : {}),
         });
       }
       if (sms.fee > 0) {

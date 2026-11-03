@@ -1,4 +1,4 @@
-import type { TransactionType, WalletId } from "@/types/finance";
+import type { ExpenseSubtype, TransactionType, WalletId } from "@/types/finance";
 
 export type SmsKind =
   | "om_transfer"
@@ -446,6 +446,23 @@ export function parseSmsBatch(text: string): { parsed: ParsedSms[]; unrecognized
     else unrecognized.push(chunk);
   }
   return { parsed, unrecognized };
+}
+
+/** Transfert, retrait ou paiement : le compartiment de dépense d'un SMS (undefined pour une entrée). */
+export function smsSubtype(sms: ParsedSms): ExpenseSubtype | undefined {
+  if (sms.type !== "expense") return undefined;
+  switch (sms.kind) {
+    case "om_transfer":
+    case "wave_send":
+      return "transfert";
+    case "om_payment":
+    case "wave_payment":
+      return "paiement";
+    default:
+      if (/retrait/i.test(sms.raw)) return "retrait";
+      if (/paiement|pay[eé]|achat|marchand/i.test(sms.raw) || sms.merchant) return "paiement";
+      return "transfert";
+  }
 }
 
 /** Clé stable pour repérer un SMS déjà importé. */

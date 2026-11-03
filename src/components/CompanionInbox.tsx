@@ -8,11 +8,14 @@ import { useSmsImporter } from "@/hooks/useSmsImporter";
 import { db } from "@/lib/firebase";
 import { formatFCFA } from "@/lib/finance-utils";
 import { setPendingImport } from "@/lib/import-inbox";
+import { ackNativeMessages, isNativeApp, onNativeMessage, peekNativeMessages } from "@/lib/native-bridge";
 import { parseSmsBatch } from "@/lib/sms-parser";
 
 interface InboxItem {
   id: string;
   text: string;
+  /** Vient de l'app Android (file locale) plutôt que de la boîte Firestore. */
+  native: boolean;
 }
 
 /**
@@ -33,7 +36,7 @@ export default function CompanionInbox() {
   const uid = user?.uid ?? null;
 
   useEffect(() => {
-    if (!uid || !cloudReady || !db) return;
+    if (!uid || !cloudReady) return;
     const database = db;
 
     const drain = async () => {
@@ -58,7 +61,8 @@ export default function CompanionInbox() {
             if (sure.length < fresh.length) toConfirm.push(item.text);
           }
           // Importé, doublon ou non reconnu : on vide la boîte. Seul l'incertain est repassé à l'utilisateur.
-          await deleteDoc(doc(database, "users", uid, "inbox", item.id)).catch(() => undefined);
+          if (item.native) ackNativeMessages([item.id]);
+          else if (database) await deleteDoc(doc(database, "users", uid, "inbox", item.id)).catch(() => undefined);
         }
       } finally {
         draining.current = false;
@@ -79,18 +83,51 @@ export default function CompanionInbox() {
       }
     };
 
-    return onSnapshot(
-      collection(database, "users", uid, "inbox"),
-      (snap) => {
-        for (const d of snap.docs) {
-          const text = d.data().text;
-          if (typeof text !== "string") void deleteDoc(d.ref).catch(() => undefined);
-          else if (!queue.current.some((q) => q.id === d.id)) queue.current.push({ id: d.id, text });
-        }
-        void drain();
-      },
-      (err) => console.warn("Boîte de réception indisponible :", err)
-    );
+    const enqueue = (items: InboxItem[]) => {
+      for (const it of items) {
+        if (!queue.current.some((q) => q.id === it.id && q.native === it.native)) queue.current.push(it);
+      }
+      void drain();
+    };
+
+    const cleanups: Array<() => void> = [];
+
+    // Boîte Firestore : messages déposés par le webhook (MacroDroid, Raccourcis…).
+    if (database) {
+      cleanups.push(
+        onSnapshot(
+          collection(database, "users", uid, "inbox"),
+          (snap) => {
+            const items: InboxItem[] = [];
+            for (const d of snap.docs) {
+              const text = d.data().text;
+              if (typeof text !== "string") void deleteDoc(d.ref).catch(() => undefined);
+              else items.push({ id: d.id, text, native: false });
+            }
+            enqueue(items);
+          },
+          (err) => console.warn("Boîte de réception indisponible :", err)
+        )
+      );
+    }
+
+    // App Android : file locale du téléphone, relue à l'ouverture, au retour sur l'app et à chaque message.
+    if (isNativeApp()) {
+      const pull = () => enqueue(peekNativeMessages().map((m) => ({ ...m, native: true })));
+      pull();
+      cleanups.push(onNativeMessage(pull));
+      const onVisible = () => {
+        if (document.visibilityState === "visible") pull();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("focus", pull);
+      cleanups.push(() => {
+        document.removeEventListener("visibilitychange", onVisible);
+        window.removeEventListener("focus", pull);
+      });
+    }
+
+    return () => cleanups.forEach((c) => c());
   }, [uid, cloudReady]);
 
   if (!toast) return null;
