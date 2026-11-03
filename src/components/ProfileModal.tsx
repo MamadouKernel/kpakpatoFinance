@@ -136,6 +136,15 @@ export default function ProfileModal({ onClose }: { onClose: () => void }) {
         >
           {busy ? "Enregistrement…" : "Enregistrer"}
         </button>
+
+        <a
+          href="/confidentialite"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 block text-center text-[11px] text-slate-500 underline"
+        >
+          Politique de confidentialité
+        </a>
       </div>
     </div>,
     document.body
